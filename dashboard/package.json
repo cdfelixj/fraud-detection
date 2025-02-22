@@ -1,0 +1,44 @@
+{
+  "name": "fraud-detection-dashboard",
+  "version": "1.0.0",
+  "description": "Real-Time Financial Fraud Detection Dashboard",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "set NODE_OPTIONS=--openssl-legacy-provider && react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-scripts": "4.0.3",
+    "react-router-dom": "^5.3.0",
+    "axios": "^0.21.1",
+    "redux": "^4.1.0",
+    "react-redux": "^7.2.4",
+    "chart.js": "^3.9.1",
+    "react-chartjs-2": "^4.3.1",
+    "socket.io-client": "^4.5.0",
+    "moment": "^2.29.4"
+  },
+  "devDependencies": {
+    "eslint": "^7.14.0",
+    "eslint-plugin-react": "^7.27.1"
+  },
+  "proxy": "http://localhost:5000",
+  "homepage": ".",
+  "license": "MIT",
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
