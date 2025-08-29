@@ -138,7 +138,14 @@ class PostgresHandler:
         WHERE timestamp >= NOW() - INTERVAL '24 hours'
         """
         result = self.query(query)
-        return result[0] if result else {}
+        if result and len(result) > 0:
+            return result[0]
+        return {
+            'total_transactions': 0,
+            'fraud_transactions': 0,
+            'avg_fraud_probability': 0.0,
+            'high_risk_transactions': 0
+        }
 
     def health_check(self):
         """Check database connectivity"""

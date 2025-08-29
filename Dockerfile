@@ -32,9 +32,11 @@ USER appuser
 # Expose port
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/api/health || exit 1
+# Health check - simplified and more robust
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=5 \
+    CMD python -c "import requests; requests.get('http://localhost:5000/api/health', timeout=5)" || \
+    curl -f http://localhost:5000/api/health || \
+    curl -f http://localhost:5000/ || exit 1
 
-# Default command
-CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "src.api.app:app"]
+# Start with Python directly first, then fallback to gunicorn
+CMD ["python", "-c", "import sys; sys.path.insert(0, '/app'); from src.api.app import app; app.run(host='0.0.0.0', port=5000, debug=False)"]

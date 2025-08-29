@@ -14,13 +14,13 @@ class FraudDataPreprocessor:
         self.feature_names = []
         
     def clean_data(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Clean data by handling missing values, duplicates, and outliers"""
+        """Clean data by handling missing values and duplicates"""
         logger.info(f"Cleaning data with shape: {data.shape}")
         
         # Create a copy to avoid modifying original data
         cleaned_data = data.copy()
         
-        # Handle missing values
+        # Handle missing values - simple approach
         numeric_columns = cleaned_data.select_dtypes(include=[np.number]).columns
         categorical_columns = cleaned_data.select_dtypes(include=['object']).columns
         
@@ -29,53 +29,19 @@ class FraudDataPreprocessor:
             if cleaned_data[col].isnull().sum() > 0:
                 cleaned_data[col].fillna(cleaned_data[col].median(), inplace=True)
         
-        # Fill categorical missing values with mode
+        # Fill categorical missing values with 'unknown'
         for col in categorical_columns:
             if cleaned_data[col].isnull().sum() > 0:
-                cleaned_data[col].fillna(cleaned_data[col].mode()[0] if not cleaned_data[col].mode().empty else 'unknown', inplace=True)
+                cleaned_data[col].fillna('unknown', inplace=True)
         
         # Remove duplicates
-        initial_size = len(cleaned_data)
         cleaned_data = cleaned_data.drop_duplicates()
-        duplicates_removed = initial_size - len(cleaned_data)
-        
-        if duplicates_removed > 0:
-            logger.info(f"Removed {duplicates_removed} duplicate records")
         
         logger.info(f"Data cleaned. Final shape: {cleaned_data.shape}")
         return cleaned_data
 
-    def handle_outliers(self, data: pd.DataFrame, columns: Optional[List[str]] = None, method: str = 'iqr') -> pd.DataFrame:
-        """Handle outliers using IQR or Z-score method"""
-        if columns is None:
-            columns = data.select_dtypes(include=[np.number]).columns.tolist()
-        
-        cleaned_data = data.copy()
-        
-        for col in columns:
-            if method == 'iqr':
-                Q1 = cleaned_data[col].quantile(0.25)
-                Q3 = cleaned_data[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-                
-                # Cap outliers instead of removing them
-                cleaned_data[col] = np.where(cleaned_data[col] < lower_bound, lower_bound, cleaned_data[col])
-                cleaned_data[col] = np.where(cleaned_data[col] > upper_bound, upper_bound, cleaned_data[col])
-                
-            elif method == 'zscore':
-                z_scores = np.abs((cleaned_data[col] - cleaned_data[col].mean()) / cleaned_data[col].std())
-                # Cap values beyond 3 standard deviations
-                outlier_mask = z_scores > 3
-                if outlier_mask.sum() > 0:
-                    median_val = cleaned_data[col].median()
-                    cleaned_data.loc[outlier_mask, col] = median_val
-        
-        return cleaned_data
-
     def encode_categorical_features(self, data: pd.DataFrame, categorical_columns: Optional[List[str]] = None) -> pd.DataFrame:
-        """Encode categorical features"""
+        """Encode categorical features using simple label encoding"""
         if categorical_columns is None:
             categorical_columns = data.select_dtypes(include=['object']).columns.tolist()
         
@@ -86,17 +52,12 @@ class FraudDataPreprocessor:
                 self.encoders[col] = LabelEncoder()
                 encoded_data[col] = self.encoders[col].fit_transform(encoded_data[col].astype(str))
             else:
-                # Handle unseen categories
+                # Simple handling of unseen categories
                 try:
                     encoded_data[col] = self.encoders[col].transform(encoded_data[col].astype(str))
                 except ValueError:
-                    # Handle unseen labels by assigning a default value
-                    unique_vals = encoded_data[col].unique()
-                    for val in unique_vals:
-                        if val not in self.encoders[col].classes_:
-                            # Add new class to encoder
-                            self.encoders[col].classes_ = np.append(self.encoders[col].classes_, val)
-                    encoded_data[col] = self.encoders[col].transform(encoded_data[col].astype(str))
+                    # Assign default value for unseen labels
+                    encoded_data[col] = 0
         
         return encoded_data
 
@@ -162,15 +123,11 @@ class FraudDataPreprocessor:
         if categorical_columns:
             transformed_data = self.encode_categorical_features(transformed_data, categorical_columns)
         
-        # Step 4: Handle outliers
+        # Step 4: Scale features 
         numeric_columns = transformed_data.select_dtypes(include=[np.number]).columns.tolist()
         if target_column and target_column in numeric_columns:
             numeric_columns.remove(target_column)
         
-        if numeric_columns:
-            transformed_data = self.handle_outliers(transformed_data, numeric_columns)
-        
-        # Step 5: Scale features
         if numeric_columns:
             transformed_data = self.scale_features(transformed_data, columns=numeric_columns)
         
