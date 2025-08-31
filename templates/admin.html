@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-5">
+                <i class="fas fa-cogs text-primary me-3"></i>
+                Administration Panel
+            </h1>
+            <p class="lead text-muted">System administration and data management</p>
+        </div>
+    </div>
+
+    <!-- System Statistics -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-credit-card fa-2x text-primary mb-3"></i>
+                    <h4>{{ stats.total_transactions or 0 }}</h4>
+                    <p class="text-muted">Total Transactions</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-brain fa-2x text-info mb-3"></i>
+                    <h4>{{ stats.total_predictions or 0 }}</h4>
+                    <p class="text-muted">Total Predictions</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-comments fa-2x text-success mb-3"></i>
+                    <h4>{{ stats.total_feedback or 0 }}</h4>
+                    <p class="text-muted">Feedback Records</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-exclamation-triangle fa-2x text-warning mb-3"></i>
+                    <h4>{{ stats.active_alerts_count or 0 }}</h4>
+                    <p class="text-muted">Active Alerts</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Management Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-database me-2"></i>
+                        Data Management Operations
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> These operations permanently delete data and cannot be undone. 
+                        Please ensure you have proper backups before proceeding.
+                    </div>
+                    
+                    <div class="row">
+                        <!-- Clear Predictions -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-brain me-2"></i>
+                                        Clear Predictions
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Remove all machine learning predictions while keeping transaction data and feedback.</p>
+                                    <ul class="list-unstyled mb-3">
+                                        <li><i class="fas fa-check text-success me-2"></i>Keeps transaction data</li>
+                                        <li><i class="fas fa-check text-success me-2"></i>Keeps feedback data</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all predictions</li>
+                                    </ul>
+                                    <button class="btn btn-outline-warning" onclick="clearData('predictions')" 
+                                            {% if stats.total_predictions == 0 %}disabled{% endif %}>
+                                        <i class="fas fa-broom me-2"></i>
+                                        Clear {{ stats.total_predictions or 0 }} Predictions
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Clear Feedback -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-comments me-2"></i>
+                                        Clear Feedback
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Remove all user feedback data while keeping transaction data and predictions.</p>
+                                    <ul class="list-unstyled mb-3">
+                                        <li><i class="fas fa-check text-success me-2"></i>Keeps transaction data</li>
+                                        <li><i class="fas fa-check text-success me-2"></i>Keeps predictions</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all feedback</li>
+                                    </ul>
+                                    <button class="btn btn-outline-warning" onclick="clearData('feedback')" 
+                                            {% if stats.total_feedback == 0 %}disabled{% endif %}>
+                                        <i class="fas fa-comments me-2"></i>
+                                        Clear {{ stats.total_feedback or 0 }} Feedback Records
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Clear Validation Data -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-check-double me-2"></i>
+                                        Clear Validation Data
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Remove all predictions and feedback data while keeping transaction data.</p>
+                                    <ul class="list-unstyled mb-3">
+                                        <li><i class="fas fa-check text-success me-2"></i>Keeps transaction data</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all predictions</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all feedback</li>
+                                    </ul>
+                                    <button class="btn btn-outline-warning" onclick="clearData('validation')" 
+                                            {% if stats.total_predictions == 0 and stats.total_feedback == 0 %}disabled{% endif %}>
+                                        <i class="fas fa-check-double me-2"></i>
+                                        Clear Validation Data
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Clear All Data -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100 border-danger">
+                                <div class="card-header bg-danger text-white">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-trash-alt me-2"></i>
+                                        Clear All Data
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text">Remove all data from the system including transactions, predictions, feedback, and alerts.</p>
+                                    <ul class="list-unstyled mb-3">
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all transactions</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all predictions</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all feedback</li>
+                                        <li><i class="fas fa-times text-danger me-2"></i>Removes all alerts</li>
+                                    </ul>
+                                    <button class="btn btn-danger" onclick="clearData('transactions')" 
+                                            {% if stats.total_transactions == 0 %}disabled{% endif %}>
+                                        <i class="fas fa-trash-alt me-2"></i>
+                                        Clear All {{ stats.total_transactions or 0 }} Records
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Navigation Back -->
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('index') }}" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>
+                            Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function clearData(dataType) {
+    const confirmMessages = {
+        'predictions': 'Are you sure you want to clear all prediction data? This action cannot be undone.',
+        'feedback': 'Are you sure you want to clear all feedback data? This action cannot be undone.',
+        'validation': 'Are you sure you want to clear all validation data (predictions and feedback)? This action cannot be undone.',
+        'transactions': 'Are you sure you want to clear ALL data including transactions, predictions, feedback, and alerts? This action cannot be undone and will remove everything from the database.'
+    };
+    
+    const endpoints = {
+        'predictions': '/api/clear-predictions',
+        'feedback': '/api/clear-feedback',
+        'validation': '/api/clear-validation',
+        'transactions': '/api/clear-transactions'
+    };
+    
+    if (!confirm(confirmMessages[dataType])) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clearing...';
+    button.disabled = true;
+    
+    fetch(endpoints[dataType], {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.message);
+            // Reload the page to update the statistics
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while clearing data');
+    })
+    .finally(() => {
+        // Restore button state
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+</script>
+{% endblock %}

@@ -1155,3 +1155,153 @@ def api_get_transaction_details(transaction_id):
     except Exception as e:
         logging.error(f"Error getting transaction details: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/clear-predictions", methods=["POST"])
+def clear_predictions():
+    """Clear all prediction data from the database"""
+    try:
+        # Count records before deletion
+        prediction_count = Prediction.query.count()
+        
+        # Delete all predictions
+        Prediction.query.delete()
+        db.session.commit()
+        
+        logging.info(f"Cleared {prediction_count} prediction records")
+        flash(f"Successfully cleared {prediction_count} prediction records", "success")
+        
+        return jsonify({
+            "message": f"Successfully cleared {prediction_count} prediction records",
+            "records_cleared": prediction_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error clearing predictions: {str(e)}")
+        return jsonify({"error": f"Failed to clear predictions: {str(e)}"}), 500
+
+
+@app.route("/api/clear-feedback", methods=["POST"])
+def clear_feedback():
+    """Clear all prediction feedback data from the database"""
+    try:
+        # Count records before deletion
+        feedback_count = PredictionFeedback.query.count()
+        
+        # Delete all feedback
+        PredictionFeedback.query.delete()
+        db.session.commit()
+        
+        logging.info(f"Cleared {feedback_count} feedback records")
+        flash(f"Successfully cleared {feedback_count} feedback records", "success")
+        
+        return jsonify({
+            "message": f"Successfully cleared {feedback_count} feedback records",
+            "records_cleared": feedback_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error clearing feedback: {str(e)}")
+        return jsonify({"error": f"Failed to clear feedback: {str(e)}"}), 500
+
+
+@app.route("/api/clear-transactions", methods=["POST"])
+def clear_transactions():
+    """Clear all transaction data from the database (including related predictions and feedback)"""
+    try:
+        # Count records before deletion
+        transaction_count = Transaction.query.count()
+        prediction_count = Prediction.query.count()
+        feedback_count = PredictionFeedback.query.count()
+        alert_count = FraudAlert.query.count()
+        
+        # Delete all related data (due to foreign key constraints, start with dependent tables)
+        PredictionFeedback.query.delete()
+        FraudAlert.query.delete()
+        Prediction.query.delete()
+        Transaction.query.delete()
+        db.session.commit()
+        
+        logging.info(f"Cleared {transaction_count} transactions, {prediction_count} predictions, {feedback_count} feedback, and {alert_count} alerts")
+        flash(f"Successfully cleared all data: {transaction_count} transactions, {prediction_count} predictions, {feedback_count} feedback, and {alert_count} alerts", "success")
+        
+        return jsonify({
+            "message": f"Successfully cleared all data",
+            "transactions_cleared": transaction_count,
+            "predictions_cleared": prediction_count,
+            "feedback_cleared": feedback_count,
+            "alerts_cleared": alert_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error clearing transactions: {str(e)}")
+        return jsonify({"error": f"Failed to clear transactions: {str(e)}"}), 500
+
+
+@app.route("/api/clear-validation", methods=["POST"])
+def clear_validation():
+    """Clear all prediction validation data (predictions and feedback)"""
+    try:
+        # Count records before deletion
+        prediction_count = Prediction.query.count()
+        feedback_count = PredictionFeedback.query.count()
+        
+        # Delete validation data (feedback first due to foreign key constraints)
+        PredictionFeedback.query.delete()
+        Prediction.query.delete()
+        db.session.commit()
+        
+        logging.info(f"Cleared {prediction_count} predictions and {feedback_count} feedback records")
+        flash(f"Successfully cleared validation data: {prediction_count} predictions and {feedback_count} feedback", "success")
+        
+        return jsonify({
+            "message": f"Successfully cleared validation data",
+            "predictions_cleared": prediction_count,
+            "feedback_cleared": feedback_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error clearing validation data: {str(e)}")
+        return jsonify({"error": f"Failed to clear validation data: {str(e)}"}), 500
+
+
+@app.route("/admin")
+def admin_panel():
+    """Admin panel for data management"""
+    try:
+        # Get basic statistics
+        total_transactions = Transaction.query.count()
+        fraud_transactions = Transaction.query.filter_by(actual_class=1).count()
+        normal_transactions = total_transactions - fraud_transactions
+        
+        # Get prediction and feedback statistics
+        total_predictions = Prediction.query.count()
+        total_feedback = PredictionFeedback.query.count()
+        
+        # Get active fraud alerts
+        active_alerts_count = FraudAlert.query.filter_by(acknowledged=False).count()
+        
+        # Calculate fraud rate
+        fraud_rate = (fraud_transactions / total_transactions * 100) if total_transactions > 0 else 0
+        
+        stats = {
+            'total_transactions': total_transactions,
+            'fraud_transactions': fraud_transactions,
+            'normal_transactions': normal_transactions,
+            'fraud_rate': fraud_rate,
+            'model_trained': ml_models.is_trained,
+            'active_alerts_count': active_alerts_count,
+            'total_predictions': total_predictions,
+            'total_feedback': total_feedback
+        }
+        
+        return render_template('admin.html', stats=stats)
+        
+    except Exception as e:
+        logging.error(f"Error loading admin panel: {str(e)}")
+        flash(f'Error loading admin panel: {str(e)}', 'danger')
+        return redirect(url_for('index'))

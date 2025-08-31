@@ -248,6 +248,57 @@
     </div>
     {% endif %}
 
+    <!-- Data Management -->
+    {% if stats.total_transactions > 0 or stats.total_predictions > 0 or stats.total_feedback > 0 %}
+    <div class="row mt-4 mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning bg-opacity-25">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-database me-2"></i>
+                        Data Management
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <p class="mb-2">Clear data to reset the system or remove outdated information:</p>
+                            <div class="btn-group" role="group">
+                                {% if stats.total_predictions > 0 %}
+                                <button class="btn btn-outline-warning btn-sm" onclick="clearData('predictions')">
+                                    <i class="fas fa-broom me-1"></i>Clear Predictions
+                                </button>
+                                {% endif %}
+                                {% if stats.total_feedback > 0 %}
+                                <button class="btn btn-outline-warning btn-sm" onclick="clearData('feedback')">
+                                    <i class="fas fa-comments me-1"></i>Clear Feedback
+                                </button>
+                                {% endif %}
+                                {% if stats.total_predictions > 0 or stats.total_feedback > 0 %}
+                                <button class="btn btn-outline-warning btn-sm" onclick="clearData('validation')">
+                                    <i class="fas fa-check-double me-1"></i>Clear Validation
+                                </button>
+                                {% endif %}
+                                {% if stats.total_transactions > 0 %}
+                                <button class="btn btn-outline-danger btn-sm" onclick="clearData('transactions')">
+                                    <i class="fas fa-trash-alt me-1"></i>Clear All Data
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <small class="text-muted">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                Actions cannot be undone
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Real-time Simulation Chart -->
     <div class="row mt-4" id="simulationSection" style="display: none;">
         <div class="col-12">
@@ -278,4 +329,60 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function clearData(dataType) {
+    const confirmMessages = {
+        'predictions': 'Are you sure you want to clear all prediction data? This action cannot be undone.',
+        'feedback': 'Are you sure you want to clear all feedback data? This action cannot be undone.',
+        'validation': 'Are you sure you want to clear all validation data (predictions and feedback)? This action cannot be undone.',
+        'transactions': 'Are you sure you want to clear ALL data including transactions, predictions, feedback, and alerts? This action cannot be undone and will remove everything from the database.'
+    };
+    
+    const endpoints = {
+        'predictions': '/api/clear-predictions',
+        'feedback': '/api/clear-feedback',
+        'validation': '/api/clear-validation',
+        'transactions': '/api/clear-transactions'
+    };
+    
+    if (!confirm(confirmMessages[dataType])) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Clearing...';
+    button.disabled = true;
+    
+    fetch(endpoints[dataType], {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.message);
+            // Reload the page to update the statistics
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while clearing data');
+    })
+    .finally(() => {
+        // Restore button state
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+</script>
 {% endblock %}

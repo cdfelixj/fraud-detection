@@ -11,9 +11,6 @@ env/
 README.md
 Dockerfile
 .dockerignore
-.replit
-.replit.md
-replit.md
 node_modules/
 *.log
 temp_upload.csv

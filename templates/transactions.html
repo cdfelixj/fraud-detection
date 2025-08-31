@@ -10,6 +10,9 @@
             <button class="btn btn-outline-secondary btn-sm me-2" onclick="exportTransactions()">
                 <i class="fas fa-download me-1"></i>Export
             </button>
+            <button class="btn btn-outline-danger btn-sm me-2" onclick="clearTransactionData()">
+                <i class="fas fa-trash-alt me-1"></i>Clear All Data
+            </button>
             <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">
                 <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
             </a>
@@ -290,6 +293,44 @@ function predictSingle(transactionId) {
 
 function exportTransactions() {
     window.location.href = '/api/export-transactions?' + new URLSearchParams(new FormData(document.getElementById('filterForm')));
+}
+
+function clearTransactionData() {
+    if (!confirm('Are you sure you want to clear ALL data including transactions, predictions, feedback, and alerts? This action cannot be undone and will remove everything from the database.')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Clearing...';
+    button.disabled = true;
+    
+    fetch('/api/clear-transactions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.message);
+            // Redirect to dashboard since there will be no transactions to show
+            window.location.href = '/';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while clearing transaction data');
+    })
+    .finally(() => {
+        // Restore button state
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
 }
 </script>
 {% endblock %}

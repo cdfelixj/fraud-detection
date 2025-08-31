@@ -10,6 +10,9 @@
             <button class="btn btn-primary me-2" onclick="generateBatchPredictions()">
                 <i class="fas fa-brain me-1"></i>Generate Predictions
             </button>
+            <button class="btn btn-outline-warning me-2" onclick="clearValidationData()">
+                <i class="fas fa-broom me-1"></i>Clear Validation Data
+            </button>
             <a href="{{ url_for('index') }}" class="btn btn-secondary">
                 <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
             </a>
@@ -507,6 +510,44 @@ function validatePrediction(transactionId, actualClass) {
     .catch(error => {
         console.error('Error:', error);
         alert('Error updating ground truth');
+    });
+}
+
+function clearValidationData() {
+    if (!confirm('Are you sure you want to clear all validation data (predictions and feedback)? This action cannot be undone.')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Clearing...';
+    button.disabled = true;
+    
+    fetch('/api/clear-validation', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.message);
+            // Reload the page to update the validation data
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while clearing validation data');
+    })
+    .finally(() => {
+        // Restore button state
+        button.innerHTML = originalText;
+        button.disabled = false;
     });
 }
 </script>

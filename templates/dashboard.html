@@ -229,6 +229,64 @@
         </div>
     </div>
 
+    <!-- Data Management Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-database me-2"></i>
+                        Data Management
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="d-grid">
+                                <button class="btn btn-outline-warning" onclick="clearData('predictions')">
+                                    <i class="fas fa-broom me-2"></i>
+                                    Clear Predictions
+                                </button>
+                                <small class="text-muted mt-1">Remove all prediction data</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="d-grid">
+                                <button class="btn btn-outline-warning" onclick="clearData('feedback')">
+                                    <i class="fas fa-comments me-2"></i>
+                                    Clear Feedback
+                                </button>
+                                <small class="text-muted mt-1">Remove all feedback data</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="d-grid">
+                                <button class="btn btn-outline-warning" onclick="clearData('validation')">
+                                    <i class="fas fa-check-double me-2"></i>
+                                    Clear Validation
+                                </button>
+                                <small class="text-muted mt-1">Remove predictions & feedback</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="d-grid">
+                                <button class="btn btn-outline-danger" onclick="clearData('transactions')">
+                                    <i class="fas fa-trash-alt me-2"></i>
+                                    Clear All Data
+                                </button>
+                                <small class="text-muted mt-1">Remove all transaction data</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning mt-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> These actions cannot be undone. Make sure to backup your data before clearing.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Action Buttons -->
     <div class="row">
         <div class="col-12 text-center">
@@ -256,5 +314,57 @@
 <script>
 // Charts will be initialized by dashboard.js
 // This ensures no conflicts with dynamic chart updates
+
+function clearData(dataType) {
+    const confirmMessages = {
+        'predictions': 'Are you sure you want to clear all prediction data? This action cannot be undone.',
+        'feedback': 'Are you sure you want to clear all feedback data? This action cannot be undone.',
+        'validation': 'Are you sure you want to clear all validation data (predictions and feedback)? This action cannot be undone.',
+        'transactions': 'Are you sure you want to clear ALL data including transactions, predictions, feedback, and alerts? This action cannot be undone and will remove everything from the database.'
+    };
+    
+    const endpoints = {
+        'predictions': '/api/clear-predictions',
+        'feedback': '/api/clear-feedback',
+        'validation': '/api/clear-validation',
+        'transactions': '/api/clear-transactions'
+    };
+    
+    if (!confirm(confirmMessages[dataType])) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clearing...';
+    button.disabled = true;
+    
+    fetch(endpoints[dataType], {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            alert(data.message);
+            // Reload the page to update the statistics
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while clearing data');
+    })
+    .finally(() => {
+        // Restore button state
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
 </script>
 {% endblock %}

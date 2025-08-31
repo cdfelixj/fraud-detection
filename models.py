@@ -89,7 +89,7 @@ class PredictionFeedback(db.Model):
     prediction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('predictions.id'), nullable=False)
     transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), nullable=False)
     user_feedback: Mapped[str] = mapped_column(String(20), nullable=False)  # 'correct', 'incorrect', 'uncertain'
-    actual_outcome: Mapped[int] = mapped_column(Integer)  # 0=normal, 1=fraud (if known)
+    actual_outcome: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0=normal, 1=fraud (required)
     feedback_reason: Mapped[str] = mapped_column(Text)  # Why user thinks it's correct/incorrect
     confidence_rating: Mapped[int] = mapped_column(Integer)  # 1-5 scale of user confidence
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

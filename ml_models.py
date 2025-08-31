@@ -222,10 +222,10 @@ class FraudDetectionModels:
             
             # Log metrics
             logging.info(f"Model Performance:")
-            logging.info(f"Precision: {precision:.4f}")
-            logging.info(f"Recall: {recall:.4f}")
-            logging.info(f"F1-Score: {f1:.4f}")
-            logging.info(f"Accuracy: {accuracy:.4f}")
+            logging.info(f"Precision: {precision:.7f}")
+            logging.info(f"Recall: {recall:.7f}")
+            logging.info(f"F1-Score: {f1:.7f}")
+            logging.info(f"Accuracy: {accuracy:.7f}")
             logging.info(f"AUC: {auc:.4f}")
             
             # Save to database
@@ -506,7 +506,24 @@ class FraudDetectionModels:
             feedback.prediction_id = prediction_id
             feedback.transaction_id = prediction.transaction_id
             feedback.user_feedback = feedback_data.get('feedback', 'uncertain')  # 'correct', 'incorrect', 'uncertain'
-            feedback.actual_outcome = feedback_data.get('actual_outcome')  # 0 or 1 if known
+            
+            # Handle actual_outcome based on feedback type
+            user_feedback = feedback.user_feedback
+            provided_actual_outcome = feedback_data.get('actual_outcome')
+            
+            if provided_actual_outcome is not None:
+                # User explicitly provided the actual outcome
+                feedback.actual_outcome = provided_actual_outcome
+            elif user_feedback == 'correct':
+                # If user says prediction is correct, actual outcome matches the prediction
+                feedback.actual_outcome = prediction.final_prediction
+            elif user_feedback == 'incorrect':
+                # If user says prediction is incorrect, actual outcome is the opposite
+                feedback.actual_outcome = 1 - prediction.final_prediction if prediction.final_prediction is not None else 0
+            else:  # uncertain
+                # For uncertain feedback, we don't know the actual outcome, so use prediction as best guess
+                feedback.actual_outcome = prediction.final_prediction if prediction.final_prediction is not None else 0
+            
             feedback.feedback_reason = feedback_data.get('reason', '')
             feedback.confidence_rating = feedback_data.get('confidence_rating', 3)  # 1-5 scale
             feedback.created_by = feedback_data.get('user_id', 'anonymous')
