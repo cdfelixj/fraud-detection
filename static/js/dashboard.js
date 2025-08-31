@@ -3,6 +3,9 @@
 // Global variables
 let charts = {};
 let refreshInterval;
+let simulationInterval;
+let isSimulating = false;
+let realtimeChart;
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -551,3 +554,154 @@ window.addEventListener('beforeunload', function() {
         }
     });
 });
+
+
+// Real-time simulation functions
+function toggleSimulation() {
+    const btn = document.getElementById("simulateBtn");
+    const section = document.getElementById("simulationSection");
+    
+    if (!isSimulating) {
+        startSimulation();
+        btn.innerHTML = "<i class=\"fas fa-stop me-2\"></i>Stop Simulation";
+        btn.className = "btn btn-danger w-100";
+        section.style.display = "block";
+        isSimulating = true;
+    } else {
+        stopSimulation();
+        btn.innerHTML = "<i class=\"fas fa-play me-2\"></i>Start Simulation";
+        btn.className = "btn btn-primary w-100";
+        section.style.display = "none";
+        isSimulating = false;
+    }
+}
+
+function startSimulation() {
+    initRealtimeChart();
+    
+    // Fetch new data every 2 seconds
+    simulationInterval = setInterval(() => {
+        fetch("/api/simulation-data")
+            .then(response => response.json())
+            .then(data => {
+                updateRealtimeChart(data);
+            })
+            .catch(error => {
+                console.error("Error fetching simulation data:", error);
+            });
+    }, 2000);
+}
+
+function stopSimulation() {
+    if (simulationInterval) {
+        clearInterval(simulationInterval);
+        simulationInterval = null;
+    }
+    
+    if (realtimeChart) {
+        realtimeChart.destroy();
+        realtimeChart = null;
+    }
+}
+
+function initRealtimeChart() {
+    const ctx = document.getElementById("realtimeChart");
+    if (!ctx) return;
+    
+    // Destroy existing chart if it exists
+    if (realtimeChart) {
+        realtimeChart.destroy();
+    }
+    
+    realtimeChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: [],
+            datasets: [{
+                label: "Transaction Amount",
+                data: [],
+                borderColor: "rgba(54, 162, 235, 1)",
+                backgroundColor: "rgba(54, 162, 235, 0.1)",
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }, {
+                label: "Fraud Score",
+                data: [],
+                borderColor: "rgba(255, 99, 132, 1)",
+                backgroundColor: "rgba(255, 99, 132, 0.1)",
+                borderWidth: 2,
+                fill: false,
+                tension: 0.4,
+                yAxisID: "y1"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 0
+            },
+            interaction: {
+                intersect: false,
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: "Time"
+                    }
+                },
+                y: {
+                    type: "linear",
+                    display: true,
+                    position: "left",
+                    title: {
+                        display: true,
+                        text: "Amount ($)"
+                    }
+                },
+                y1: {
+                    type: "linear",
+                    display: true,
+                    position: "right",
+                    title: {
+                        display: true,
+                        text: "Fraud Score"
+                    },
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                    max: 1,
+                    min: 0
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true
+                }
+            }
+        }
+    });
+}
+
+function updateRealtimeChart(data) {
+    if (!realtimeChart || !data) return;
+    
+    const maxDataPoints = 20;
+    
+    // Add new data point
+    realtimeChart.data.labels.push(data.timestamp);
+    realtimeChart.data.datasets[0].data.push(data.amount);
+    realtimeChart.data.datasets[1].data.push(data.fraud_score);
+    
+    // Remove old data points if we have too many
+    if (realtimeChart.data.labels.length > maxDataPoints) {
+        realtimeChart.data.labels.shift();
+        realtimeChart.data.datasets[0].data.shift();
+        realtimeChart.data.datasets[1].data.shift();
+    }
+    
+    realtimeChart.update("none");
+}

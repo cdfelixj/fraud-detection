@@ -256,9 +256,21 @@ class FraudDetectionModels:
         try:
             alerts_created = 0
             
-            for i, (txn, pred_data) in enumerate(zip(transactions, predictions)):
-                confidence = pred_data.get('confidence_scores', [0])[i] if isinstance(pred_data.get('confidence_scores'), np.ndarray) else pred_data.get('confidence_scores', 0)
-                final_pred = pred_data.get('final_predictions', [0])[i] if isinstance(pred_data.get('final_predictions'), np.ndarray) else pred_data.get('final_predictions', 0)
+            # Handle both dictionary and direct array predictions
+            if isinstance(predictions, dict):
+                confidence_scores = predictions.get('ensemble_scores', [])
+                final_predictions = predictions.get('final_predictions', [])
+            else:
+                # Assume predictions is the ensemble_scores array directly
+                confidence_scores = predictions
+                final_predictions = (np.array(predictions) > 0.5).astype(int)
+            
+            for i, txn in enumerate(transactions):
+                if i >= len(confidence_scores) or i >= len(final_predictions):
+                    continue
+                    
+                confidence = float(confidence_scores[i])
+                final_pred = int(final_predictions[i])
                 
                 if final_pred == 1:  # Fraud detected
                     if confidence > 0.8:
@@ -281,3 +293,42 @@ class FraudDetectionModels:
             
         except Exception as e:
             logging.error(f"Error creating fraud alerts: {str(e)}")
+    
+    def update_parameters(self, params):
+        """Update model parameters from user input"""
+        try:
+            # Update isolation forest parameters
+            if 'contamination' in params:
+                self.iso_params['contamination'] = params['contamination']
+            if 'n_estimators_iso' in params:
+                self.iso_params['n_estimators'] = params['n_estimators_iso']
+            if 'max_samples' in params:
+                self.iso_params['max_samples'] = params['max_samples'] if params['max_samples'] != 'auto' else 'auto'
+            
+            # Update logistic regression parameters
+            if 'max_iter' in params:
+                self.log_params['max_iter'] = params['max_iter']
+            if 'solver' in params:
+                self.log_params['solver'] = params['solver']
+            if 'penalty' in params:
+                self.log_params['penalty'] = params['penalty']
+            
+            # Update ensemble weights
+            if 'iso_weight' in params and 'log_weight' in params:
+                self.ensemble_weights['isolation'] = params['iso_weight']
+                self.ensemble_weights['logistic'] = params['log_weight']
+            
+            # Update training parameters
+            if 'test_size' in params:
+                self.training_params['test_size'] = params['test_size']
+            if 'random_state' in params:
+                self.training_params['random_state'] = params['random_state']
+                self.iso_params['random_state'] = params['random_state']
+                self.log_params['random_state'] = params['random_state']
+            if 'cross_validation' in params:
+                self.training_params['cross_validation'] = params['cross_validation']
+            
+            logging.info("Model parameters updated successfully")
+            
+        except Exception as e:
+            logging.error(f"Error updating parameters: {str(e)}")

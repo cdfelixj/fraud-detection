@@ -146,9 +146,13 @@
                         </a>
                     {% endif %}
                     
-                    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary w-100">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary w-100 mb-2">
                         <i class="fas fa-chart-line me-2"></i>View Analytics
                     </a>
+                    
+                    <button class="btn btn-primary w-100" id="simulateBtn" onclick="toggleSimulation()">
+                        <i class="fas fa-play me-2"></i>Start Simulation
+                    </button>
                 </div>
             </div>
         </div>
@@ -202,5 +206,23 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Real-time Simulation Chart -->
+    <div class="row mt-4" id="simulationSection" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Real-time Transaction Simulation
+                        <span class="badge bg-success ms-2" id="simulationStatus">Live</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="realtimeChart" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

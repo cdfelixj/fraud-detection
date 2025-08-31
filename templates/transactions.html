@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}All Transactions - Credit Card Fraud Detection{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-table me-3"></i>Transaction History</h2>
+        <div>
+            <button class="btn btn-outline-secondary btn-sm me-2" onclick="exportTransactions()">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-filter me-2"></i>Filters
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" id="filterForm">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="classFilter" class="form-label">Transaction Type</label>
+                        <select class="form-select" id="classFilter" name="class_filter">
+                            <option value="">All Transactions</option>
+                            <option value="0" {% if request.args.get('class_filter') == '0' %}selected{% endif %}>Normal</option>
+                            <option value="1" {% if request.args.get('class_filter') == '1' %}selected{% endif %}>Fraud</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="minAmount" class="form-label">Min Amount</label>
+                        <input type="number" class="form-control" id="minAmount" name="min_amount" 
+                               value="{{ request.args.get('min_amount', '') }}" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="maxAmount" class="form-label">Max Amount</label>
+                        <input type="number" class="form-control" id="maxAmount" name="max_amount" 
+                               value="{{ request.args.get('max_amount', '') }}" step="0.01" placeholder="1000.00">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="limitFilter" class="form-label">Results per Page</label>
+                        <select class="form-select" id="limitFilter" name="limit">
+                            <option value="50" {% if request.args.get('limit') == '50' %}selected{% endif %}>50</option>
+                            <option value="100" {% if request.args.get('limit') == '100' %}selected{% endif %}>100</option>
+                            <option value="250" {% if request.args.get('limit') == '250' %}selected{% endif %}>250</option>
+                            <option value="500" {% if request.args.get('limit') == '500' %}selected{% endif %}>500</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="fas fa-search me-1"></i>Apply Filters
+                        </button>
+                        <a href="{{ url_for('view_transactions') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times me-1"></i>Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Transaction Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <h4>{{ total_count }}</h4>
+                    <small>Total Transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h4>{{ normal_count }}</h4>
+                    <small>Normal Transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center">
+                    <h4>{{ fraud_count }}</h4>
+                    <small>Fraud Transactions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <h4>${{ avg_amount }}</h4>
+                    <small>Average Amount</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-list me-2"></i>Transaction Data
+                <span class="badge bg-secondary ms-2">{{ transactions|length }} results</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Time</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                            <th>V1-V5</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in transactions %}
+                        <tr class="{% if txn.actual_class == 1 %}table-danger{% endif %}">
+                            <td><strong>{{ txn.id }}</strong></td>
+                            <td>{{ "%.2f"|format(txn.time_feature) }}</td>
+                            <td>
+                                <span class="badge bg-{% if txn.amount > 1000 %}warning{% else %}success{% endif %}">
+                                    ${{ "%.2f"|format(txn.amount) }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if txn.actual_class == 1 %}
+                                    <span class="badge bg-danger">Fraud</span>
+                                {% else %}
+                                    <span class="badge bg-success">Normal</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">
+                                    {{ "%.2f"|format(txn.v1) }}, 
+                                    {{ "%.2f"|format(txn.v2) }}, 
+                                    {{ "%.2f"|format(txn.v3) }}, 
+                                    {{ "%.2f"|format(txn.v4) }}, 
+                                    {{ "%.2f"|format(txn.v5) }}
+                                </small>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-info" onclick="viewTransactionDetails({{ txn.id }})">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="predictSingle({{ txn.id }})">
+                                    <i class="fas fa-brain"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        
+                        {% if not transactions %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                                No transactions found matching your criteria.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if transactions|length == limit %}
+    <div class="text-center mt-4">
+        <p class="text-muted">Showing {{ transactions|length }} results. Use filters to refine your search.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Transaction Details Modal -->
+<div class="modal fade" id="transactionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Transaction Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function viewTransactionDetails(transactionId) {
+    fetch(`/api/transaction/${transactionId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error loading transaction details');
+                return;
+            }
+            
+            let html = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Basic Information</h6>
+                        <p><strong>ID:</strong> ${data.id}</p>
+                        <p><strong>Time:</strong> ${data.time_feature}</p>
+                        <p><strong>Amount:</strong> $${data.amount}</p>
+                        <p><strong>Type:</strong> <span class="badge bg-${data.actual_class == 1 ? 'danger' : 'success'}">${data.actual_class == 1 ? 'Fraud' : 'Normal'}</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Feature Values (V1-V10)</h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <small>V1: ${data.v1}</small><br>
+                                <small>V2: ${data.v2}</small><br>
+                                <small>V3: ${data.v3}</small><br>
+                                <small>V4: ${data.v4}</small><br>
+                                <small>V5: ${data.v5}</small>
+                            </div>
+                            <div class="col-6">
+                                <small>V6: ${data.v6}</small><br>
+                                <small>V7: ${data.v7}</small><br>
+                                <small>V8: ${data.v8}</small><br>
+                                <small>V9: ${data.v9}</small><br>
+                                <small>V10: ${data.v10}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('modalBody').innerHTML = html;
+            new bootstrap.Modal(document.getElementById('transactionModal')).show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading transaction details');
+        });
+}
+
+function predictSingle(transactionId) {
+    fetch(`/api/predict-single/${transactionId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+            
+            const resultClass = data.prediction == 1 ? 'danger' : 'success';
+            const resultText = data.prediction == 1 ? 'Fraud Detected' : 'Normal Transaction';
+            
+            alert(`Prediction Result: ${resultText}\nConfidence: ${(data.confidence * 100).toFixed(1)}%`);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error running prediction');
+        });
+}
+
+function exportTransactions() {
+    window.location.href = '/api/export-transactions?' + new URLSearchParams(new FormData(document.getElementById('filterForm')));
+}
+</script>
+{% endblock %}
