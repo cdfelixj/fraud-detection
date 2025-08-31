@@ -234,6 +234,11 @@ class FraudDetectionModels:
             if os.path.exists('saved_models/logistic_model.pkl'):
                 self.logistic_model = joblib.load('saved_models/logistic_model.pkl')
             
+            # Load the data processor to get the scaler
+            from data_processor import DataProcessor
+            self.data_processor = DataProcessor()
+            self.data_processor.load_scaler()
+            
             if self.isolation_forest and self.logistic_model:
                 self.is_trained = True
                 logging.info("Models loaded successfully")

@@ -220,6 +220,10 @@ def run_predictions():
             flash('Error preparing data for prediction', 'danger')
             return redirect(url_for('dashboard'))
         
+        # Load scaler if not already fitted
+        if not hasattr(data_processor.scaler, 'scale_'):
+            data_processor.load_scaler()
+        
         # Scale features
         X_scaled = data_processor.scaler.transform(X)
         

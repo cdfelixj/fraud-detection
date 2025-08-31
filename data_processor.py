@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import logging
+import joblib
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from models import Transaction
@@ -163,6 +164,9 @@ class DataProcessor:
             # Scale features
             X_scaled = self.scaler.fit_transform(X)
             
+            # Save the fitted scaler
+            self.save_scaler()
+            
             # Split data
             X_train, X_test, y_train, y_test = train_test_split(
                 X_scaled, y, test_size=0.2, random_state=42, stratify=y
@@ -176,3 +180,25 @@ class DataProcessor:
         except Exception as e:
             logging.error(f"Error preparing training data: {str(e)}")
             return None, None, None, None
+    
+    def save_scaler(self):
+        """Save the fitted scaler"""
+        try:
+            joblib.dump(self.scaler, 'scaler.pkl')
+            logging.info("Scaler saved successfully")
+        except Exception as e:
+            logging.error(f"Error saving scaler: {str(e)}")
+    
+    def load_scaler(self):
+        """Load the fitted scaler"""
+        try:
+            if os.path.exists('scaler.pkl'):
+                self.scaler = joblib.load('scaler.pkl')
+                logging.info("Scaler loaded successfully")
+                return True
+            else:
+                logging.warning("No saved scaler found")
+                return False
+        except Exception as e:
+            logging.error(f"Error loading scaler: {str(e)}")
+            return False
