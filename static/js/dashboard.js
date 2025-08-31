@@ -589,7 +589,7 @@ function startSimulation() {
             .catch(error => {
                 console.error("Error fetching simulation data:", error);
             });
-    }, 2000);
+    }, 1000);
 }
 
 function stopSimulation() {
@@ -689,7 +689,7 @@ function initRealtimeChart() {
 function updateRealtimeChart(data) {
     if (!realtimeChart || !data) return;
     
-    const maxDataPoints = 20;
+    const maxDataPoints = 15;
     
     // Add new data point
     realtimeChart.data.labels.push(data.timestamp);

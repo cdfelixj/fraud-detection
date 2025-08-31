@@ -301,7 +301,7 @@ function loadNormalTransaction() {
         document.getElementById(`v${i}`).value = normalValues[i-1] || 0;
     }
     for (let i = 15; i <= 28; i++) {
-        document.getElementById(`v${i}`).value = (Math.random() - 0.5) * 0.4;
+        document.getElementById(`v${i}`).value = (Math.floor(Math.random() * 100000) / 100000 - 0.5) * 0.4;
     }
 }
 
@@ -310,7 +310,7 @@ function loadSuspiciousTransaction() {
     document.getElementById('amount').value = '1250.00';
     // Set suspicious transaction patterns
     for (let i = 1; i <= 28; i++) {
-        document.getElementById(`v${i}`).value = (Math.random() - 0.5) * 2;
+        document.getElementById(`v${i}`).value = (Math.floor(Math.random() * 100000) / 100000 - 0.5) * 2;
     }
 }
 
@@ -323,7 +323,7 @@ function loadFraudTransaction() {
         document.getElementById(`v${i}`).value = fraudValues[i-1] || 0;
     }
     for (let i = 15; i <= 28; i++) {
-        document.getElementById(`v${i}`).value = (Math.random() - 0.5) * 4;
+        document.getElementById(`v${i}`).value = (Math.floor(Math.random() * 100000) / 100000 - 0.5) * 4;
     }
 }
 

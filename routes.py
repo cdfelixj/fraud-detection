@@ -541,7 +541,7 @@ def prepare_chart_data():
 def load_initial_data():
     """Load initial data if CSV file exists"""
     try:
-        csv_path = 'attached_assets/creditcard - Copy_1756648231869.csv'
+        csv_path = 'attached_assets/creditcard.csv'
         if os.path.exists(csv_path) and Transaction.query.count() == 0:
             logging.info("Loading initial dataset...")
             
