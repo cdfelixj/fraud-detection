@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-5">
+                <i class="fas fa-chart-line text-primary me-3"></i>
+                Analytics Dashboard
+            </h1>
+            <p class="lead text-muted">Detailed analysis and model performance metrics</p>
+        </div>
+    </div>
+
+    <!-- Statistics Overview -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-credit-card fa-2x text-primary mb-3"></i>
+                    <h4>{{ total_transactions or 0 }}</h4>
+                    <p class="text-muted">Total Transactions</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-exclamation-triangle fa-2x text-danger mb-3"></i>
+                    <h4>{{ fraud_count or 0 }}</h4>
+                    <p class="text-muted">Fraud Cases</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-percentage fa-2x text-warning mb-3"></i>
+                    <h4>{{ "%.2f"|format(fraud_rate or 0) }}%</h4>
+                    <p class="text-muted">Fraud Rate</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-{% if model_trained %}check-circle text-success{% else %}times-circle text-danger{% endif %} fa-2x mb-3"></i>
+                    <h4>{% if model_trained %}Ready{% else %}Training{% endif %}</h4>
+                    <p class="text-muted">Model Status</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Transaction Amount Distribution -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>
+                        Transaction Amount Distribution
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="amountDistributionChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Class Distribution -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>
+                        Class Distribution
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="classDistributionChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Performance -->
+    {% if performance_metrics %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-trophy me-2"></i>
+                        Model Performance Metrics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-primary">{{ "%.3f"|format(performance_metrics.precision_score) }}</h3>
+                            <p class="text-muted">Precision</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-success">{{ "%.3f"|format(performance_metrics.recall_score) }}</h3>
+                            <p class="text-muted">Recall</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-info">{{ "%.3f"|format(performance_metrics.f1_score) }}</h3>
+                            <p class="text-muted">F1-Score</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-warning">{{ "%.3f"|format(performance_metrics.accuracy_score) }}</h3>
+                            <p class="text-muted">Accuracy</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-secondary">{{ "%.3f"|format(performance_metrics.auc_score) }}</h3>
+                            <p class="text-muted">AUC</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <small class="text-muted">Last Updated<br>{{ performance_metrics.evaluation_date.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Transactions and Alerts -->
+    <div class="row">
+        <!-- Recent Transactions -->
+        <div class="col-md-8 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-list me-2"></i>
+                        Recent Transactions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_transactions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Amount</th>
+                                    <th>Class</th>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for txn in recent_transactions %}
+                                <tr>
+                                    <td>#{{ txn.id }}</td>
+                                    <td>${{ "%.2f"|format(txn.amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if txn.actual_class == 1 %}danger{% else %}success{% endif %}">
+                                            {% if txn.actual_class == 1 %}Fraud{% else %}Normal{% endif %}
+                                        </span>
+                                    </td>
+                                    <td>{{ txn.created_at.strftime('%H:%M:%S') if txn.created_at else 'N/A' }}</td>
+                                    <td>
+                                        {% if txn.predictions %}
+                                            <i class="fas fa-check-circle text-success" title="Processed"></i>
+                                        {% else %}
+                                            <i class="fas fa-clock text-warning" title="Pending"></i>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>No transactions available</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Alerts -->
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-bell me-2"></i>
+                        Recent Alerts
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_alerts %}
+                    {% for alert in recent_alerts %}
+                    <div class="alert alert-{% if alert.alert_level == 'HIGH' %}danger{% elif alert.alert_level == 'MEDIUM' %}warning{% else %}info{% endif %} py-2 mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ alert.alert_level }}</strong><br>
+                                <small>Transaction #{{ alert.transaction_id }}</small>
+                            </div>
+                            {% if not alert.acknowledged %}
+                            <a href="{{ url_for('acknowledge_alert', alert_id=alert.id) }}" 
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-check"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-shield-alt fa-2x mb-3"></i>
+                        <p>No alerts</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row">
+        <div class="col-12 text-center">
+            {% if not model_trained %}
+            <a href="{{ url_for('train_models') }}" class="btn btn-primary btn-lg me-3">
+                <i class="fas fa-brain me-2"></i>Train Models
+            </a>
+            {% endif %}
+            
+            {% if model_trained %}
+            <a href="{{ url_for('run_predictions') }}" class="btn btn-success btn-lg me-3">
+                <i class="fas fa-search me-2"></i>Run Predictions
+            </a>
+            {% endif %}
+            
+            <a href="{{ url_for('upload_data') }}" class="btn btn-secondary btn-lg">
+                <i class="fas fa-upload me-2"></i>Upload New Data
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize charts when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCharts();
+});
+
+function initializeCharts() {
+    // Amount Distribution Chart
+    const amountCtx = document.getElementById('amountDistributionChart').getContext('2d');
+    new Chart(amountCtx, {
+        type: 'bar',
+        data: {
+            labels: ['$0-$50', '$50-$100', '$100-$500', '$500-$1000', '$1000+'],
+            datasets: [{
+                label: 'Transaction Count',
+                data: [{{ normal_count or 0 }}, {{ fraud_count or 0 }}, 0, 0, 0],
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Class Distribution Chart
+    const classCtx = document.getElementById('classDistributionChart').getContext('2d');
+    new Chart(classCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Normal', 'Fraud'],
+            datasets: [{
+                data: [{{ normal_count or 0 }}, {{ fraud_count or 0 }}],
+                backgroundColor: [
+                    'rgba(75, 192, 192, 0.6)',
+                    'rgba(255, 99, 132, 0.6)'
+                ],
+                borderColor: [
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(255, 99, 132, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
