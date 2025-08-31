@@ -261,3 +261,87 @@ footer {
 [data-bs-theme="dark"] ::-webkit-scrollbar-thumb:hover {
     background: var(--bs-gray-500);
 }
+
+/* Confusion Matrix Table Styling */
+.confusion-matrix-cell {
+    font-weight: 600;
+    text-align: center;
+    padding: 1rem !important;
+    border: 2px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+/* True Negatives - Green background with dark text */
+.table-success.confusion-matrix-cell {
+    background-color: rgba(25, 135, 84, 0.15) !important;
+    color: #155724 !important;
+    border-color: rgba(25, 135, 84, 0.3) !important;
+}
+
+/* False Positives - Orange/Warning background with dark text */
+.table-warning.confusion-matrix-cell {
+    background-color: rgba(255, 193, 7, 0.15) !important;
+    color: #856404 !important;
+    border-color: rgba(255, 193, 7, 0.3) !important;
+}
+
+/* False Negatives - Red background with dark text */
+.table-danger.confusion-matrix-cell {
+    background-color: rgba(220, 53, 69, 0.15) !important;
+    color: #721c24 !important;
+    border-color: rgba(220, 53, 69, 0.3) !important;
+}
+
+/* True Positives - Green background with dark text (same as True Negatives) */
+.table-success.confusion-matrix-cell:last-child {
+    background-color: rgba(25, 135, 84, 0.15) !important;
+    color: #155724 !important;
+    border-color: rgba(25, 135, 84, 0.3) !important;
+}
+
+/* Dark theme adjustments for confusion matrix */
+[data-bs-theme="dark"] .table-success.confusion-matrix-cell {
+    background-color: rgba(25, 135, 84, 0.25) !important;
+    color: #9dd99e !important;
+    border-color: rgba(25, 135, 84, 0.5) !important;
+}
+
+[data-bs-theme="dark"] .table-warning.confusion-matrix-cell {
+    background-color: rgba(255, 193, 7, 0.25) !important;
+    color: #ffda6a !important;
+    border-color: rgba(255, 193, 7, 0.5) !important;
+}
+
+[data-bs-theme="dark"] .table-danger.confusion-matrix-cell {
+    background-color: rgba(220, 53, 69, 0.25) !important;
+    color: #f8a1a8 !important;
+    border-color: rgba(220, 53, 69, 0.5) !important;
+}
+
+/* Transaction Table Row Styling */
+.transaction-fraud-row {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+    border-left: 4px solid #dc3545;
+}
+
+.transaction-fraud-row td {
+    color: #721c24 !important;
+    font-weight: 500;
+}
+
+.transaction-fraud-row:hover {
+    background-color: rgba(220, 53, 69, 0.15) !important;
+}
+
+/* Dark theme adjustments for transaction rows */
+[data-bs-theme="dark"] .transaction-fraud-row {
+    background-color: rgba(220, 53, 69, 0.2) !important;
+    border-left-color: #dc3545;
+}
+
+[data-bs-theme="dark"] .transaction-fraud-row td {
+    color: #f8a1a8 !important;
+}
+
+[data-bs-theme="dark"] .transaction-fraud-row:hover {
+    background-color: rgba(220, 53, 69, 0.25) !important;
+}

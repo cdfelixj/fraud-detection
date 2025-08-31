@@ -127,7 +127,7 @@
                     </thead>
                     <tbody>
                         {% for txn in transactions %}
-                        <tr class="{% if txn.actual_class == 1 %}table-danger{% endif %}">
+                        <tr class="{% if txn.actual_class == 1 %}transaction-fraud-row{% endif %}">
                             <td><strong>{{ txn.id }}</strong></td>
                             <td>{{ "%.2f"|format(txn.time_feature) }}</td>
                             <td>

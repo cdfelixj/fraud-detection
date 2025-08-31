@@ -82,13 +82,13 @@
                         <tbody>
                             <tr>
                                 <th>Normal (0)</th>
-                                <td class="table-success"><strong>{{ validation_stats.true_negatives }}</strong><br><small>True Negatives</small></td>
-                                <td class="table-warning"><strong>{{ validation_stats.false_positives }}</strong><br><small>False Positives</small></td>
+                                <td class="table-success confusion-matrix-cell"><strong>{{ validation_stats.true_negatives }}</strong><br><small>True Negatives</small></td>
+                                <td class="table-warning confusion-matrix-cell"><strong>{{ validation_stats.false_positives }}</strong><br><small>False Positives</small></td>
                             </tr>
                             <tr>
                                 <th>Fraud (1)</th>
-                                <td class="table-danger"><strong>{{ validation_stats.false_negatives }}</strong><br><small>False Negatives</small></td>
-                                <td class="table-success"><strong>{{ validation_stats.true_positives }}</strong><br><small>True Positives</small></td>
+                                <td class="table-danger confusion-matrix-cell"><strong>{{ validation_stats.false_negatives }}</strong><br><small>False Negatives</small></td>
+                                <td class="table-success confusion-matrix-cell"><strong>{{ validation_stats.true_positives }}</strong><br><small>True Positives</small></td>
                             </tr>
                         </tbody>
                     </table>
