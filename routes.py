@@ -330,38 +330,69 @@ def acknowledge_alert(alert_id):
 
 @app.route('/api/simulation-data')
 def simulation_data():
-    """Generate simulated real-time transaction data"""
+    """Stream real transaction data from database"""
     try:
         import random
         import datetime
         
-        # Generate random transaction data
-        amount = random.uniform(0.01, 5000.0)
+        # Check if we have real transaction data in database
+        total_transactions = Transaction.query.count()
         
-        # Simple fraud scoring based on amount and random factors
-        fraud_score = 0.0
+        if total_transactions == 0:
+            return jsonify({
+                'error': 'No transaction data available in database. Please upload data first.'
+            }), 404
         
-        # Higher amounts are more likely to be fraud
-        if amount > 1000:
-            fraud_score += 0.3
-        if amount > 3000:
-            fraud_score += 0.3
-            
-        # Add some randomness
-        fraud_score += random.uniform(0, 0.4)
-        fraud_score = min(fraud_score, 1.0)
+        # Stream real data from database
+        # Get a random transaction to simulate real-time processing
+        random_offset = random.randint(0, total_transactions - 1)
+        transaction = Transaction.query.offset(random_offset).first()
         
-        # Add timestamp
+        if not transaction:
+            return jsonify({
+                'error': 'Could not retrieve transaction from database.'
+            }), 500
+        
+        # Use real transaction data
+        fraud_score = transaction.actual_class  # 0 or 1
+        
+        # If we have trained models, get actual prediction
+        if ml_models.is_trained:
+            try:
+                # Prepare features for prediction
+                features = np.array([[
+                    transaction.time_feature,
+                    transaction.v1, transaction.v2, transaction.v3, transaction.v4, transaction.v5,
+                    transaction.v6, transaction.v7, transaction.v8, transaction.v9, transaction.v10,
+                    transaction.v11, transaction.v12, transaction.v13, transaction.v14, transaction.v15,
+                    transaction.v16, transaction.v17, transaction.v18, transaction.v19, transaction.v20,
+                    transaction.v21, transaction.v22, transaction.v23, transaction.v24, transaction.v25,
+                    transaction.v26, transaction.v27, transaction.v28, transaction.amount
+                ]])
+                
+                # Get model prediction using ensemble method
+                prediction_result = ml_models.ensemble_predict(features)
+                if prediction_result and 'ensemble_scores' in prediction_result:
+                    fraud_score = float(prediction_result['ensemble_scores'][0])
+                
+            except Exception as e:
+                logging.warning(f"Could not get model prediction for simulation: {e}")
+                # Fall back to actual class as score
+                pass
+        
         timestamp = datetime.datetime.now().strftime('%H:%M:%S')
         
         return jsonify({
             'timestamp': timestamp,
-            'amount': round(amount, 2),
-            'fraud_score': round(fraud_score, 3)
+            'amount': round(transaction.amount, 2),
+            'fraud_score': round(fraud_score, 3),
+            'transaction_id': transaction.id,
+            'actual_class': transaction.actual_class,
+            'data_source': 'database'
         })
         
     except Exception as e:
-        logging.error(f"Error generating simulation data: {str(e)}")
+        logging.error(f"Error streaming simulation data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/transactions')

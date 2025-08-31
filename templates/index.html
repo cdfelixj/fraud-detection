@@ -150,7 +150,8 @@
                         <i class="fas fa-chart-line me-2"></i>View Analytics
                     </a>
                     
-                    <button class="btn btn-primary w-100" id="simulateBtn" onclick="toggleSimulation()">
+                    <button class="btn btn-primary w-100" id="simulateBtn" onclick="toggleSimulation()"
+                            {% if stats.total_transactions == 0 %}disabled title="Upload transaction data first"{% endif %}>
                         <i class="fas fa-play me-2"></i>Start Simulation
                     </button>
                 </div>
@@ -217,9 +218,21 @@
                         Real-time Transaction Simulation
                         <span class="badge bg-success ms-2" id="simulationStatus">Live</span>
                     </h5>
+                    <p class="mb-0 mt-2 text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <span id="simulationDescription">
+                            {% if stats.total_transactions > 0 %}
+                                Streaming real transaction data from database ({{ stats.total_transactions }} transactions available)
+                            {% else %}
+                                Requires transaction data in database. Please upload data to enable simulation.
+                            {% endif %}
+                        </span>
+                    </p>
                 </div>
                 <div class="card-body">
-                    <canvas id="realtimeChart" height="400"></canvas>
+                    <div style="height: 400px; position: relative;">
+                        <canvas id="realtimeChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>

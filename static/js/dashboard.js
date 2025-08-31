@@ -582,12 +582,24 @@ function startSimulation() {
     // Fetch new data every 2 seconds
     simulationInterval = setInterval(() => {
         fetch("/api/simulation-data")
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                updateRealtimeChart(data);
+                if (data.error) {
+                    showSimulationError(data.error);
+                    stopSimulation();
+                } else {
+                    updateRealtimeChart(data);
+                }
             })
             .catch(error => {
                 console.error("Error fetching simulation data:", error);
+                showSimulationError("Failed to fetch transaction data. Please check if data is loaded in the database.");
+                stopSimulation();
             });
     }, 1000);
 }
@@ -645,6 +657,9 @@ function initRealtimeChart() {
             interaction: {
                 intersect: false,
             },
+            layout: {
+                padding: 10
+            },
             scales: {
                 x: {
                     display: true,
@@ -660,6 +675,13 @@ function initRealtimeChart() {
                     title: {
                         display: true,
                         text: "Amount ($)"
+                    },
+                    beginAtZero: true,
+                    suggestedMax: 5000,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
                     }
                 },
                 y1: {
@@ -674,12 +696,19 @@ function initRealtimeChart() {
                         drawOnChartArea: false,
                     },
                     max: 1,
-                    min: 0
+                    min: 0,
+                    ticks: {
+                        stepSize: 0.2,
+                        callback: function(value) {
+                            return (value * 100).toFixed(0) + '%';
+                        }
+                    }
                 }
             },
             plugins: {
                 legend: {
-                    display: true
+                    display: true,
+                    position: 'top'
                 }
             }
         }
@@ -703,5 +732,93 @@ function updateRealtimeChart(data) {
         realtimeChart.data.datasets[1].data.shift();
     }
     
+    // Update the simulation status badge
+    const statusBadge = document.getElementById("simulationStatus");
+    if (statusBadge) {
+        statusBadge.textContent = 'Live (Database)';
+        statusBadge.className = 'badge bg-success ms-2';
+    }
+    
+    // Update transaction info
+    updateTransactionInfo(data);
+    
     realtimeChart.update("none");
+}
+
+function showSimulationError(errorMessage) {
+    // Update status badge to show error
+    const statusBadge = document.getElementById("simulationStatus");
+    if (statusBadge) {
+        statusBadge.textContent = 'Error';
+        statusBadge.className = 'badge bg-danger ms-2';
+    }
+    
+    // Show error in transaction info area
+    let infoDiv = document.getElementById("transactionInfo");
+    if (!infoDiv) {
+        const chartContainer = document.querySelector("#simulationSection .card-body");
+        if (chartContainer) {
+            infoDiv = document.createElement("div");
+            infoDiv.id = "transactionInfo";
+            infoDiv.className = "mt-3 p-3 border rounded";
+            chartContainer.appendChild(infoDiv);
+        }
+    }
+    
+    if (infoDiv) {
+        infoDiv.innerHTML = `
+            <div class="alert alert-warning mb-0">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Simulation Stopped:</strong> ${errorMessage}
+            </div>
+        `;
+    }
+}
+
+function updateTransactionInfo(data) {
+    // Create or update transaction info display
+    let infoDiv = document.getElementById("transactionInfo");
+    if (!infoDiv) {
+        const chartContainer = document.querySelector("#simulationSection .card-body");
+        if (chartContainer) {
+            infoDiv = document.createElement("div");
+            infoDiv.id = "transactionInfo";
+            infoDiv.className = "mt-3 p-3 border rounded bg-dark text-white";
+            chartContainer.appendChild(infoDiv);
+        }
+    }
+    
+    if (infoDiv) {
+        // Update the class in case it was created with old styling
+        infoDiv.className = "mt-3 p-3 border rounded bg-dark text-white";
+        
+        let infoHtml = `
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>Latest Transaction:</strong><br>
+                    Amount: $${data.amount}<br>
+                    Time: ${data.timestamp}<br>
+                    Fraud Score: ${data.fraud_score}
+                </div>
+                <div class="col-md-6">
+                    <strong>Data Source:</strong> Database<br>
+        `;
+        
+        if (data.transaction_id) {
+            infoHtml += `Transaction ID: ${data.transaction_id}<br>`;
+        }
+        
+        if (data.actual_class !== undefined) {
+            const actualLabel = data.actual_class === 1 ? 'Fraud' : 'Normal';
+            const labelClass = data.actual_class === 1 ? 'text-danger' : 'text-success';
+            infoHtml += `Actual Class: <span class="${labelClass}"><strong>${actualLabel}</strong></span><br>`;
+        }
+        
+        infoHtml += `
+                </div>
+            </div>
+        `;
+        
+        infoDiv.innerHTML = infoHtml;
+    }
 }
