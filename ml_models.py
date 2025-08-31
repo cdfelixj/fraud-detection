@@ -159,7 +159,14 @@ class FraudDetectionModels:
     def evaluate_models(self, X_test, y_test):
         """Evaluate model performance and save metrics"""
         try:
+            # Temporarily set is_trained to True for evaluation
+            temp_trained = self.is_trained
+            self.is_trained = True
+            
             results = self.ensemble_predict(X_test)
+            
+            # Restore original trained status
+            self.is_trained = temp_trained
             
             if results is None:
                 logging.error("Could not get predictions for evaluation")

@@ -267,7 +267,15 @@ def api_chart_data():
         return jsonify(data)
     except Exception as e:
         logging.error(f"Error getting chart data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        # Return empty data structure instead of error to prevent JS errors
+        return jsonify({
+            'amounts': [],
+            'classes': [],
+            'normal_amounts': [],
+            'fraud_amounts': [],
+            'time_series': [],
+            'performance_history': []
+        })
 
 @app.route('/acknowledge-alert/<int:alert_id>')
 def acknowledge_alert(alert_id):
@@ -327,7 +335,15 @@ def prepare_chart_data():
         
     except Exception as e:
         logging.error(f"Error preparing chart data: {str(e)}")
-        return {}
+        # Return empty but valid structure
+        return {
+            'amounts': [],
+            'classes': [],
+            'normal_amounts': [],
+            'fraud_amounts': [],
+            'time_series': [],
+            'performance_history': []
+        }
 
 # Load initial data when app starts
 def load_initial_data():

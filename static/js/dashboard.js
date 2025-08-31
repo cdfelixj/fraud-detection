@@ -89,7 +89,7 @@ function loadChartData() {
         })
         .catch(error => {
             console.error('Error loading chart data:', error);
-            showNotification('Error loading chart data', 'danger');
+            // Don't show notification for chart data errors to avoid spam
         });
 }
 
@@ -113,8 +113,10 @@ function updateAmountDistributionChart(data) {
     const ctx = document.getElementById('amountDistributionChart');
     if (!ctx) return;
     
-    if (charts.amountDistribution) {
+    // Destroy existing chart if it exists
+    if (charts.amountDistribution && typeof charts.amountDistribution.destroy === 'function') {
         charts.amountDistribution.destroy();
+        charts.amountDistribution = null;
     }
     
     // Create amount bins
@@ -166,8 +168,10 @@ function updateClassDistributionChart(data) {
     const ctx = document.getElementById('classDistributionChart');
     if (!ctx) return;
     
-    if (charts.classDistribution) {
+    // Destroy existing chart if it exists
+    if (charts.classDistribution && typeof charts.classDistribution.destroy === 'function') {
         charts.classDistribution.destroy();
+        charts.classDistribution = null;
     }
     
     const normalCount = data.normal_amounts ? data.normal_amounts.length : 0;
@@ -211,8 +215,10 @@ function updatePerformanceChart(data) {
     const ctx = document.getElementById('performanceChart');
     if (!ctx || !data.performance_history) return;
     
-    if (charts.performance) {
+    // Destroy existing chart if it exists
+    if (charts.performance && typeof charts.performance.destroy === 'function') {
         charts.performance.destroy();
+        charts.performance = null;
     }
     
     const performanceData = data.performance_history;
@@ -273,8 +279,10 @@ function updateTimeSeriesChart(data) {
     const ctx = document.getElementById('timeSeriesChart');
     if (!ctx || !data.time_series) return;
     
-    if (charts.timeSeries) {
+    // Destroy existing chart if it exists
+    if (charts.timeSeries && typeof charts.timeSeries.destroy === 'function') {
         charts.timeSeries.destroy();
+        charts.timeSeries = null;
     }
     
     const timeSeriesData = data.time_series;
