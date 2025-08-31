@@ -104,7 +104,12 @@ class FraudDetectionModels:
         
         # Convert to probability-like scores (0-1 range)
         # Higher scores indicate higher fraud probability
-        normalized_scores = (1 - (scores - scores.min()) / (scores.max() - scores.min()))
+        score_range = scores.max() - scores.min()
+        if score_range == 0:
+            # All scores are the same, return neutral scores
+            normalized_scores = np.full(scores.shape, 0.5)
+        else:
+            normalized_scores = (1 - (scores - scores.min()) / score_range)
         
         return normalized_scores, predictions
     

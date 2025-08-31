@@ -251,21 +251,40 @@ function viewTransactionDetails(transactionId) {
 
 function predictSingle(transactionId) {
     fetch(`/api/predict-single/${transactionId}`, { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(text => {
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error('Invalid JSON response:', text);
+                throw new Error('Server returned invalid JSON response');
+            }
+            
             if (data.error) {
                 alert('Error: ' + data.error);
                 return;
             }
             
+            // Handle potential NaN or invalid confidence values
+            let confidence = data.confidence;
+            if (isNaN(confidence) || confidence === null || confidence === undefined) {
+                confidence = 0.5; // Default neutral confidence
+            }
+            
             const resultClass = data.prediction == 1 ? 'danger' : 'success';
             const resultText = data.prediction == 1 ? 'Fraud Detected' : 'Normal Transaction';
             
-            alert(`Prediction Result: ${resultText}\nConfidence: ${(data.confidence * 100).toFixed(1)}%`);
+            alert(`Prediction Result: ${resultText}\nConfidence: ${(confidence * 100).toFixed(1)}%`);
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error running prediction');
+            alert('Error running prediction: ' + error.message);
         });
 }
 

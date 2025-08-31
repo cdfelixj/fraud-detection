@@ -5,6 +5,7 @@ from data_processor import DataProcessor
 from ml_models import FraudDetectionModels
 import logging
 import os
+import numpy as np
 from datetime import datetime, timedelta
 
 # Initialize processors
@@ -261,9 +262,19 @@ def run_predictions():
             prediction = Prediction()
             prediction.transaction_id = txn.id
             prediction.isolation_forest_score = float(results['isolation_scores'][i])
-            prediction.ensemble_prediction = float(results['ensemble_scores'][i])
+            
+            # Handle potential NaN values
+            ensemble_score = float(results['ensemble_scores'][i])
+            if np.isnan(ensemble_score):
+                ensemble_score = 0.5
+            
+            confidence_score = float(results['confidence_scores'][i])
+            if np.isnan(confidence_score):
+                confidence_score = 0.5
+            
+            prediction.ensemble_prediction = ensemble_score
             prediction.final_prediction = int(results['final_predictions'][i])
-            prediction.confidence_score = float(results['confidence_scores'][i])
+            prediction.confidence_score = confidence_score
             prediction.model_version = 'v1.0'
             db.session.add(prediction)
             predictions_saved += 1
@@ -473,10 +484,19 @@ def predict_single_transaction(transaction_id):
         if results is None:
             return jsonify({'error': 'Error generating prediction'}), 500
         
+        # Handle potential NaN values
+        confidence_score = float(results['ensemble_scores'][0])
+        if np.isnan(confidence_score):
+            logging.warning(f"NaN confidence score for transaction {transaction_id}, using default")
+            confidence_score = 0.5  # Default neutral confidence
+        
+        # Ensure confidence is between 0 and 1
+        confidence_score = max(0.0, min(1.0, confidence_score))
+        
         return jsonify({
             'transaction_id': transaction_id,
             'prediction': int(results['final_predictions'][0]),
-            'confidence': float(results['ensemble_scores'][0])
+            'confidence': confidence_score
         })
         
     except Exception as e:
@@ -617,11 +637,20 @@ def api_predict_manual():
         iso_scores, iso_preds = ml_models.predict_isolation_forest(X_scaled)
         log_probs, log_preds = ml_models.predict_logistic(X_scaled)
         
+        # Handle potential NaN values
+        confidence_score = float(results["ensemble_scores"][0])
+        if np.isnan(confidence_score):
+            logging.warning("NaN confidence score in manual prediction, using default")
+            confidence_score = 0.5
+        
+        # Ensure confidence is between 0 and 1
+        confidence_score = max(0.0, min(1.0, confidence_score))
+        
         return jsonify({
             "prediction": int(results["final_predictions"][0]),
-            "confidence": float(results["ensemble_scores"][0]),
-            "isolation_score": float(iso_scores[0]) if iso_scores is not None else None,
-            "logistic_score": float(log_probs[0]) if log_probs is not None else None
+            "confidence": confidence_score,
+            "isolation_score": float(iso_scores[0]) if iso_scores is not None and not np.isnan(iso_scores[0]) else 0.5,
+            "logistic_score": float(log_probs[0]) if log_probs is not None and not np.isnan(log_probs[0]) else 0.5
         })
         
     except Exception as e:
