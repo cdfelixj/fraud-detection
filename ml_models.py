@@ -6,7 +6,7 @@ from sklearn.metrics import classification_report, precision_score, recall_score
 from sklearn.utils.class_weight import compute_class_weight
 import joblib
 import os
-from models import ModelPerformance, Prediction, FraudAlert
+from models import ModelPerformance, Prediction, FraudAlert, PredictionFeedback, Transaction
 from app import db
 
 class FraudDetectionModels:
@@ -15,6 +15,27 @@ class FraudDetectionModels:
         self.logistic_model = None
         self.ensemble_weights = {'isolation': 0.4, 'logistic': 0.6}
         self.is_trained = False
+        
+        # Initialize parameter dictionaries
+        self.iso_params = {
+            'contamination': 0.002,
+            'n_estimators': 200,
+            'max_samples': 'auto',
+            'random_state': 42
+        }
+        
+        self.log_params = {
+            'max_iter': 1000,
+            'solver': 'liblinear',
+            'penalty': 'l2',
+            'random_state': 42
+        }
+        
+        self.training_params = {
+            'test_size': 0.2,
+            'random_state': 42,
+            'cross_validation': False
+        }
         
     def train_isolation_forest(self, X_train, contamination=0.002):
         """Train Isolation Forest for anomaly detection"""
@@ -131,10 +152,18 @@ class FraudDetectionModels:
                 return None
             
             # Get individual predictions
-            iso_scores, iso_preds = self.predict_isolation_forest(X)
-            log_probs, log_preds = self.predict_logistic(X)
+            iso_result = self.predict_isolation_forest(X)
+            log_result = self.predict_logistic(X)
+            
+            if iso_result is None or log_result is None:
+                logging.error("One or more models failed to generate predictions")
+                return None
+                
+            iso_scores, iso_preds = iso_result
+            log_probs, log_preds = log_result
             
             if iso_scores is None or log_probs is None:
+                logging.error("Invalid prediction results from models")
                 return None
             
             # Ensemble scoring
@@ -256,6 +285,131 @@ class FraudDetectionModels:
             logging.error(f"Error loading models: {str(e)}")
             return False
     
+    def predict_and_save_batch(self, transactions):
+        """Predict on a batch of transactions and save results"""
+        try:
+            if not self.is_trained:
+                logging.error("Models not trained yet")
+                return False
+            
+            # Prepare features
+            features = []
+            for txn in transactions:
+                feature_row = [
+                    txn.time_feature,
+                    txn.v1, txn.v2, txn.v3, txn.v4, txn.v5,
+                    txn.v6, txn.v7, txn.v8, txn.v9, txn.v10,
+                    txn.v11, txn.v12, txn.v13, txn.v14, txn.v15,
+                    txn.v16, txn.v17, txn.v18, txn.v19, txn.v20,
+                    txn.v21, txn.v22, txn.v23, txn.v24, txn.v25,
+                    txn.v26, txn.v27, txn.v28, txn.amount
+                ]
+                features.append(feature_row)
+            
+            X = np.array(features)
+            
+            # Load scaler if needed
+            from data_processor import DataProcessor
+            data_proc = DataProcessor()
+            if not hasattr(data_proc.scaler, "scale_"):
+                data_proc.load_scaler()
+            
+            # Scale features
+            X_scaled = data_proc.scaler.transform(X)
+            
+            # Get predictions
+            results = self.ensemble_predict(X_scaled)
+            if results is None:
+                logging.error("Failed to get ensemble predictions")
+                return False
+            
+            # Get individual model results
+            iso_result = self.predict_isolation_forest(X_scaled)
+            log_result = self.predict_logistic(X_scaled)
+            
+            iso_scores = iso_result[0] if iso_result is not None else None
+            log_probs = log_result[0] if log_result is not None else None
+            
+            # Save predictions for each transaction
+            predictions_saved = 0
+            for i, txn in enumerate(transactions):
+                try:
+                    # Extract individual prediction results
+                    individual_results = {
+                        'isolation_scores': [iso_scores[i]] if iso_scores is not None else [0.0],
+                        'logistic_probabilities': [log_probs[i]] if log_probs is not None else [0.0],
+                        'ensemble_scores': [results['ensemble_scores'][i]],
+                        'final_predictions': [results['final_predictions'][i]],
+                        'confidence_scores': [results['confidence_scores'][i]]
+                    }
+                    
+                    prediction_id = self.save_prediction(
+                        transaction_id=txn.id,
+                        prediction_results=individual_results,
+                        model_version="1.0"
+                    )
+                    
+                    if prediction_id:
+                        predictions_saved += 1
+                        
+                except Exception as e:
+                    logging.error(f"Error saving prediction for transaction {txn.id}: {str(e)}")
+                    continue
+            
+            logging.info(f"Saved {predictions_saved}/{len(transactions)} predictions")
+            return predictions_saved > 0
+            
+        except Exception as e:
+            logging.error(f"Error in batch prediction: {str(e)}")
+            return False
+
+    def save_prediction(self, transaction_id, prediction_results, iso_scores=None, log_probs=None, model_version="1.0"):
+        """Save prediction results to database for later validation"""
+        try:
+            # Handle both dictionary and direct array predictions
+            if isinstance(prediction_results, dict):
+                iso_score = float(prediction_results.get('isolation_scores', [0])[0]) if iso_scores is None else float(iso_scores[0])
+                log_score = float(prediction_results.get('logistic_probabilities', [0])[0]) if log_probs is None else float(log_probs[0])
+                ensemble_score = float(prediction_results.get('ensemble_scores', [0])[0])
+                final_pred = int(prediction_results.get('final_predictions', [0])[0])
+                confidence = float(prediction_results.get('confidence_scores', [0])[0])
+            else:
+                # Fallback for direct values
+                ensemble_score = float(prediction_results)
+                final_pred = 1 if ensemble_score > 0.5 else 0
+                confidence = max(ensemble_score, 1 - ensemble_score)
+                iso_score = float(iso_scores[0]) if iso_scores is not None and len(iso_scores) > 0 else 0.0
+                log_score = float(log_probs[0]) if log_probs is not None and len(log_probs) > 0 else 0.0
+            
+            # Handle NaN values
+            if np.isnan(iso_score):
+                iso_score = 0.0
+            if np.isnan(log_score):
+                log_score = 0.0
+            if np.isnan(ensemble_score):
+                ensemble_score = 0.5
+            if np.isnan(confidence):
+                confidence = 0.5
+            
+            # Create prediction record
+            prediction = Prediction()
+            prediction.transaction_id = transaction_id
+            prediction.isolation_forest_score = iso_score
+            prediction.ensemble_prediction = ensemble_score
+            prediction.final_prediction = final_pred
+            prediction.confidence_score = confidence
+            prediction.model_version = model_version
+            
+            db.session.add(prediction)
+            db.session.commit()
+            
+            logging.info(f"Saved prediction for transaction {transaction_id}: {final_pred} (confidence: {confidence:.3f})")
+            return prediction.id
+            
+        except Exception as e:
+            logging.error(f"Error saving prediction: {str(e)}")
+            return None
+
     def create_fraud_alerts(self, transactions, predictions):
         """Create fraud alerts for high-risk transactions"""
         try:
@@ -337,3 +491,217 @@ class FraudDetectionModels:
             
         except Exception as e:
             logging.error(f"Error updating parameters: {str(e)}")
+
+    def save_prediction_feedback(self, prediction_id, feedback_data):
+        """Save user feedback on a prediction"""
+        try:
+            # Get the prediction and transaction
+            prediction = Prediction.query.get(prediction_id)
+            if not prediction:
+                logging.error(f"Prediction {prediction_id} not found")
+                return False
+            
+            # Create feedback record
+            feedback = PredictionFeedback()
+            feedback.prediction_id = prediction_id
+            feedback.transaction_id = prediction.transaction_id
+            feedback.user_feedback = feedback_data.get('feedback', 'uncertain')  # 'correct', 'incorrect', 'uncertain'
+            feedback.actual_outcome = feedback_data.get('actual_outcome')  # 0 or 1 if known
+            feedback.feedback_reason = feedback_data.get('reason', '')
+            feedback.confidence_rating = feedback_data.get('confidence_rating', 3)  # 1-5 scale
+            feedback.created_by = feedback_data.get('user_id', 'anonymous')
+            
+            db.session.add(feedback)
+            
+            # If actual outcome is provided, update the transaction
+            if feedback.actual_outcome is not None:
+                transaction = prediction.transaction
+                if transaction and transaction.actual_class == -1:  # Only update if unknown
+                    transaction.actual_class = feedback.actual_outcome
+            
+            db.session.commit()
+            
+            logging.info(f"Saved feedback for prediction {prediction_id}: {feedback.user_feedback}")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error saving feedback: {str(e)}")
+            db.session.rollback()
+            return False
+    
+    def get_feedback_statistics(self):
+        """Get statistics on user feedback"""
+        try:
+            # Total feedback count
+            total_feedback = PredictionFeedback.query.count()
+            
+            # Feedback breakdown
+            correct_feedback = PredictionFeedback.query.filter_by(user_feedback='correct').count()
+            incorrect_feedback = PredictionFeedback.query.filter_by(user_feedback='incorrect').count()
+            uncertain_feedback = PredictionFeedback.query.filter_by(user_feedback='uncertain').count()
+            
+            # Feedback with actual outcomes
+            feedback_with_outcomes = PredictionFeedback.query.filter(
+                PredictionFeedback.actual_outcome.isnot(None)
+            ).count()
+            
+            # Agreement rate (when user feedback matches actual outcome)
+            agreement_query = db.session.query(PredictionFeedback, Prediction).join(
+                Prediction, PredictionFeedback.prediction_id == Prediction.id
+            ).filter(
+                PredictionFeedback.actual_outcome.isnot(None)
+            ).all()
+            
+            total_with_outcome = len(agreement_query)
+            user_correct = 0
+            model_correct = 0
+            both_correct = 0
+            
+            for feedback, prediction in agreement_query:
+                actual = feedback.actual_outcome
+                user_said_correct = feedback.user_feedback == 'correct'
+                model_predicted = prediction.final_prediction
+                
+                if user_said_correct and model_predicted == actual:
+                    both_correct += 1
+                elif user_said_correct:
+                    user_correct += 1
+                elif model_predicted == actual:
+                    model_correct += 1
+            
+            return {
+                'total_feedback': total_feedback,
+                'correct_feedback': correct_feedback,
+                'incorrect_feedback': incorrect_feedback,
+                'uncertain_feedback': uncertain_feedback,
+                'feedback_with_outcomes': feedback_with_outcomes,
+                'user_model_agreement': both_correct,
+                'total_with_outcomes': total_with_outcome,
+                'agreement_rate': both_correct / total_with_outcome if total_with_outcome > 0 else 0
+            }
+            
+        except Exception as e:
+            logging.error(f"Error getting feedback statistics: {str(e)}")
+            return None
+    
+    def get_problematic_predictions(self, limit=20):
+        """Get predictions that received negative feedback for analysis"""
+        try:
+            # Get predictions with 'incorrect' feedback
+            problematic = db.session.query(
+                Prediction, PredictionFeedback, Transaction
+            ).join(
+                PredictionFeedback, Prediction.id == PredictionFeedback.prediction_id
+            ).join(
+                Transaction, Prediction.transaction_id == Transaction.id
+            ).filter(
+                PredictionFeedback.user_feedback == 'incorrect'
+            ).order_by(
+                PredictionFeedback.created_at.desc()
+            ).limit(limit).all()
+            
+            results = []
+            for pred, feedback, txn in problematic:
+                results.append({
+                    'prediction_id': pred.id,
+                    'transaction_id': txn.id,
+                    'predicted_class': pred.final_prediction,
+                    'actual_class': txn.actual_class,
+                    'confidence': pred.confidence_score,
+                    'ensemble_score': pred.ensemble_prediction,
+                    'feedback_reason': feedback.feedback_reason,
+                    'amount': txn.amount,
+                    'created_at': pred.prediction_time
+                })
+            
+            return results
+            
+        except Exception as e:
+            logging.error(f"Error getting problematic predictions: {str(e)}")
+            return []
+    
+    def retrain_with_feedback(self, use_feedback=True):
+        """Retrain models incorporating user feedback"""
+        try:
+            from data_processor import DataProcessor
+            data_processor = DataProcessor()
+            
+            # Get all transactions with ground truth
+            transactions = Transaction.query.filter(
+                Transaction.actual_class.in_([0, 1])
+            ).all()
+            
+            if len(transactions) < 10:
+                logging.error("Not enough transactions with ground truth for retraining")
+                return False
+            
+            # If using feedback, prioritize transactions with feedback
+            if use_feedback:
+                # Get transactions that have feedback
+                feedback_transaction_ids = db.session.query(
+                    PredictionFeedback.transaction_id
+                ).filter(
+                    PredictionFeedback.actual_outcome.isnot(None)
+                ).distinct().all()
+                
+                feedback_ids = [fid[0] for fid in feedback_transaction_ids]
+                
+                # Give more weight to transactions with feedback
+                weighted_transactions = []
+                for txn in transactions:
+                    if txn.id in feedback_ids:
+                        # Add feedback transactions multiple times to increase their weight
+                        weighted_transactions.extend([txn] * 3)
+                    else:
+                        weighted_transactions.append(txn)
+                
+                transactions = weighted_transactions
+                logging.info(f"Using {len(feedback_ids)} feedback transactions with higher weight")
+            
+            # Prepare features and labels
+            features = []
+            labels = []
+            
+            for txn in transactions:
+                feature_row = [
+                    txn.time_feature,
+                    txn.v1, txn.v2, txn.v3, txn.v4, txn.v5,
+                    txn.v6, txn.v7, txn.v8, txn.v9, txn.v10,
+                    txn.v11, txn.v12, txn.v13, txn.v14, txn.v15,
+                    txn.v16, txn.v17, txn.v18, txn.v19, txn.v20,
+                    txn.v21, txn.v22, txn.v23, txn.v24, txn.v25,
+                    txn.v26, txn.v27, txn.v28, txn.amount
+                ]
+                features.append(feature_row)
+                labels.append(txn.actual_class)
+            
+            # Convert to arrays
+            X = np.array(features)
+            y = np.array(labels)
+            
+            # Prepare data for training
+            X_scaled = data_processor.scaler.fit_transform(X)
+            
+            # Split data
+            from sklearn.model_selection import train_test_split
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_scaled, y, test_size=0.2, random_state=42, stratify=y
+            )
+            
+            # Retrain models
+            success = self.train_models(X_train, X_test, y_train, y_test)
+            
+            if success:
+                logging.info("Successfully retrained models with feedback")
+                
+                # Save the updated scaler
+                data_processor.save_scaler()
+                
+                return True
+            else:
+                logging.error("Failed to retrain models")
+                return False
+            
+        except Exception as e:
+            logging.error(f"Error retraining with feedback: {str(e)}")
+            return False

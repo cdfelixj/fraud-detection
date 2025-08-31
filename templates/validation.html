@@ -1,0 +1,535 @@
+{% extends "base.html" %}
+
+{% block title %}Prediction Validation - Credit Card Fraud Detection{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-check-circle me-3"></i>Prediction Validation</h2>
+        <div>
+            <button class="btn btn-primary me-2" onclick="generateBatchPredictions()">
+                <i class="fas fa-brain me-1"></i>Generate Predictions
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if validation_stats %}
+    <!-- Validation Statistics -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Validation Statistics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-primary">{{ validation_stats.total_predictions }}</h3>
+                            <p class="text-muted">Total Predictions</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-success">{{ validation_stats.correct_predictions }}</h3>
+                            <p class="text-muted">Correct</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-info">{{ "%.3f"|format(validation_stats.accuracy) }}</h3>
+                            <p class="text-muted">Accuracy</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-warning">{{ "%.3f"|format(validation_stats.precision) }}</h3>
+                            <p class="text-muted">Precision</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-success">{{ "%.3f"|format(validation_stats.recall) }}</h3>
+                            <p class="text-muted">Recall</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-secondary">{{ "%.3f"|format(validation_stats.f1_score) }}</h3>
+                            <p class="text-muted">F1-Score</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confusion Matrix -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-table me-2"></i>Confusion Matrix
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-bordered text-center">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" class="align-middle">Actual</th>
+                                <th colspan="2">Predicted</th>
+                            </tr>
+                            <tr>
+                                <th>Normal (0)</th>
+                                <th>Fraud (1)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <th>Normal (0)</th>
+                                <td class="table-success"><strong>{{ validation_stats.true_negatives }}</strong><br><small>True Negatives</small></td>
+                                <td class="table-warning"><strong>{{ validation_stats.false_positives }}</strong><br><small>False Positives</small></td>
+                            </tr>
+                            <tr>
+                                <th>Fraud (1)</th>
+                                <td class="table-danger"><strong>{{ validation_stats.false_negatives }}</strong><br><small>False Negatives</small></td>
+                                <td class="table-success"><strong>{{ validation_stats.true_positives }}</strong><br><small>True Positives</small></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Error Analysis
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>False Positive Rate</h6>
+                        <div class="progress">
+                            <div class="progress-bar bg-warning" style="width: {{ (validation_stats.false_positive_rate * 100)|round(1) }}%">
+                                {{ "%.1f"|format(validation_stats.false_positive_rate * 100) }}%
+                            </div>
+                        </div>
+                        <small class="text-muted">Normal transactions incorrectly flagged as fraud</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Fraud Detection Rate</h6>
+                        <div class="progress">
+                            <div class="progress-bar bg-success" style="width: {{ (validation_stats.fraud_detection_rate * 100)|round(1) }}%">
+                                {{ "%.1f"|format(validation_stats.fraud_detection_rate * 100) }}%
+                            </div>
+                        </div>
+                        <small class="text-muted">Fraud transactions correctly identified</small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>Key Insights</h6>
+                        <ul class="mb-0">
+                            <li><strong>{{ validation_stats.false_positives }}</strong> normal transactions were flagged as fraud</li>
+                            <li><strong>{{ validation_stats.false_negatives }}</strong> fraud transactions were missed</li>
+                            <li><strong>{{ "%.1f"|format(validation_stats.fraud_detection_rate * 100) }}%</strong> of fraud cases detected</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Predictions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Recent Predictions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Transaction ID</th>
+                                    <th>Amount</th>
+                                    <th>Actual</th>
+                                    <th>Predicted</th>
+                                    <th>Confidence</th>
+                                    <th>Result</th>
+                                    <th>Prediction Time</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pred in recent_predictions %}
+                                <tr class="{% if pred.is_correct %}table-success{% else %}table-danger{% endif %}">
+                                    <td>{{ pred.transaction_id }}</td>
+                                    <td>${{ "%.2f"|format(pred.amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if pred.actual_class == 1 else 'success' }}">
+                                            {{ 'Fraud' if pred.actual_class == 1 else 'Normal' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if pred.predicted_class == 1 else 'success' }}">
+                                            {{ 'Fraud' if pred.predicted_class == 1 else 'Normal' }}
+                                        </span>
+                                    </td>
+                                    <td>{{ "%.1f"|format(pred.confidence * 100) }}%</td>
+                                    <td>
+                                        {% if pred.is_correct %}
+                                            <i class="fas fa-check text-success me-1"></i>Correct
+                                        {% else %}
+                                            <i class="fas fa-times text-danger me-1"></i>Incorrect
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ pred.prediction_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info me-1" onclick="showPredictionDetails({{ pred.transaction_id }})">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="provideFeedback({{ pred.transaction_id }}, {{ pred.predicted_class }})">
+                                            <i class="fas fa-comment"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- No validation data available -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+                    <h4>No Validation Data Available</h4>
+                    <p class="text-muted">Generate predictions on existing transactions to see validation metrics.</p>
+                    <button class="btn btn-primary btn-lg" onclick="generateBatchPredictions()">
+                        <i class="fas fa-brain me-2"></i>Generate Predictions
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Feedback Modal -->
+<div class="modal fade" id="feedbackModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Provide Feedback on Prediction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="feedbackForm">
+                    <input type="hidden" id="feedbackPredictionId" name="prediction_id">
+                    <input type="hidden" id="feedbackTransactionId" name="transaction_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Transaction Details</label>
+                        <div id="transactionDetails" class="alert alert-light">
+                            <!-- Transaction details will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="userFeedback" class="form-label">Is this prediction correct?</label>
+                        <select class="form-select" id="userFeedback" name="feedback" required onchange="toggleActualOutcome()">
+                            <option value="">Select feedback...</option>
+                            <option value="correct">✓ Correct - Prediction matches reality</option>
+                            <option value="incorrect">✗ Incorrect - Prediction is wrong</option>
+                            <option value="uncertain">? Uncertain - Not sure about outcome</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="actualOutcomeSection" style="display: none;">
+                        <label for="actualOutcome" class="form-label">What was the actual outcome?</label>
+                        <select class="form-select" id="actualOutcome" name="actual_outcome">
+                            <option value="">Unknown</option>
+                            <option value="0">Normal Transaction</option>
+                            <option value="1">Fraud Transaction</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="feedbackReason" class="form-label">Reason (Optional)</label>
+                        <textarea class="form-control" id="feedbackReason" name="reason" rows="3" placeholder="Why do you think this prediction is correct/incorrect?"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="confidenceRating" class="form-label">Your Confidence (1-5)</label>
+                        <select class="form-select" id="confidenceRating" name="confidence_rating">
+                            <option value="1">1 - Very Uncertain</option>
+                            <option value="2">2 - Uncertain</option>
+                            <option value="3" selected>3 - Neutral</option>
+                            <option value="4">4 - Confident</option>
+                            <option value="5">5 - Very Confident</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitFeedback()">
+                    <i class="fas fa-comment me-1"></i>Submit Feedback
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Batch Prediction Modal -->
+<div class="modal fade" id="batchPredictionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Generate Batch Predictions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="batchPredictionForm">
+                    <div class="mb-3">
+                        <label for="batchLimit" class="form-label">Number of Transactions</label>
+                        <input type="number" class="form-control" id="batchLimit" value="100" min="1" max="1000">
+                        <div class="form-text">Maximum number of transactions to process</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skipExisting" checked>
+                            <label class="form-check-label" for="skipExisting">
+                                Skip transactions with existing predictions
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="executeBatchPrediction()">
+                    <i class="fas fa-brain me-1"></i>Generate Predictions
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function generateBatchPredictions() {
+    const modal = new bootstrap.Modal(document.getElementById('batchPredictionModal'));
+    modal.show();
+}
+
+function executeBatchPrediction() {
+    const limit = parseInt(document.getElementById('batchLimit').value);
+    const skipExisting = document.getElementById('skipExisting').checked;
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+    button.disabled = true;
+    
+    fetch('/api/batch-predict', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            limit: limit,
+            skip_existing: skipExisting
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert(result.message);
+            location.reload(); // Refresh page to show new validation data
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error generating predictions');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        bootstrap.Modal.getInstance(document.getElementById('batchPredictionModal')).hide();
+    });
+}
+
+function showPredictionDetails(transactionId) {
+    // Get prediction details and show in a more detailed modal
+    fetch(`/api/transaction/${transactionId}/details`)
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            let details = `Transaction ${transactionId} Details:\n\n`;
+            details += `Amount: $${result.amount}\n`;
+            details += `Predicted: ${result.predicted_class === 1 ? 'Fraud' : 'Normal'}\n`;
+            details += `Confidence: ${(result.confidence * 100).toFixed(1)}%\n`;
+            if (result.actual_class !== -1) {
+                details += `Actual: ${result.actual_class === 1 ? 'Fraud' : 'Normal'}\n`;
+            }
+            alert(details);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(`Showing basic details for transaction ${transactionId}`);
+    });
+}
+
+function provideFeedback(transactionId, predictedClass) {
+    // Get prediction ID for this transaction
+    fetch(`/api/transaction/${transactionId}/prediction`)
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+            return;
+        }
+        
+        // Populate feedback modal
+        document.getElementById('feedbackPredictionId').value = result.prediction_id;
+        document.getElementById('feedbackTransactionId').value = transactionId;
+        
+        document.getElementById('transactionDetails').innerHTML = `
+            <strong>Transaction ID:</strong> ${transactionId}<br>
+            <strong>Amount:</strong> $${result.amount}<br>
+            <strong>Predicted:</strong> ${predictedClass === 1 ? 'Fraud' : 'Normal'}<br>
+            <strong>Confidence:</strong> ${(result.confidence * 100).toFixed(1)}%
+        `;
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+        modal.show();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading prediction details');
+    });
+}
+
+function toggleActualOutcome() {
+    const feedback = document.getElementById('userFeedback').value;
+    const outcomeSection = document.getElementById('actualOutcomeSection');
+    
+    if (feedback === 'incorrect') {
+        outcomeSection.style.display = 'block';
+    } else {
+        outcomeSection.style.display = 'none';
+        document.getElementById('actualOutcome').value = '';
+    }
+}
+
+function submitFeedback() {
+    const form = document.getElementById('feedbackForm');
+    const formData = new FormData(form);
+    
+    const data = {
+        prediction_id: parseInt(formData.get('prediction_id')),
+        feedback: formData.get('feedback'),
+        reason: formData.get('reason'),
+        confidence_rating: parseInt(formData.get('confidence_rating')),
+        user_id: 'web_user' // In a real system, this would be the logged-in user
+    };
+    
+    if (formData.get('actual_outcome')) {
+        data.actual_outcome = parseInt(formData.get('actual_outcome'));
+    }
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Submitting...';
+    button.disabled = true;
+    
+    fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert('Feedback submitted successfully!');
+            bootstrap.Modal.getInstance(document.getElementById('feedbackModal')).hide();
+            location.reload(); // Refresh to show updated data
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error submitting feedback');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function validatePrediction(transactionId, actualClass) {
+    fetch('/api/validate-prediction', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            transaction_id: transactionId,
+            actual_class: actualClass
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert(result.message);
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating ground truth');
+    });
+}
+</script>
+
+<style>
+.table-success {
+    background-color: rgba(25, 135, 84, 0.1) !important;
+}
+
+.table-danger {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+.progress {
+    height: 25px;
+}
+
+.progress-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+}
+</style>
+{% endblock %}

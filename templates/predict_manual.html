@@ -250,6 +250,13 @@ function showResults(result) {
                 <p class="mb-0">Confidence: ${confidence}%</p>
             </div>
         </div>
+        
+        <!-- Feedback Section -->
+        <div class="mb-3">
+            <button class="btn btn-outline-primary btn-sm" onclick="provideFeedbackManual(${result.prediction_id}, ${result.prediction})">
+                <i class="fas fa-comment me-1"></i>Provide Feedback
+            </button>
+        </div>
     `;
     
     const detailsHtml = `
@@ -338,6 +345,68 @@ function generateRandom() {
     for (let i = 1; i <= 28; i++) {
         document.getElementById(`v${i}`).value = ((Math.random() - 0.5) * 6).toFixed(5);
     }
+}
+
+function provideFeedbackManual(predictionId, predictedClass) {
+    if (!predictionId) {
+        alert('No prediction ID available for feedback');
+        return;
+    }
+    
+    const feedback = prompt(
+        `Prediction: ${predictedClass === 1 ? 'Fraud' : 'Normal'}\n\n` +
+        'Was this prediction correct?\n' +
+        'Enter: "correct", "incorrect", or "uncertain"'
+    );
+    
+    if (!feedback || !['correct', 'incorrect', 'uncertain'].includes(feedback.toLowerCase())) {
+        return;
+    }
+    
+    let actualOutcome = null;
+    if (feedback.toLowerCase() === 'incorrect') {
+        const outcome = prompt(
+            'What was the actual outcome?\n' +
+            'Enter "0" for Normal or "1" for Fraud:'
+        );
+        if (outcome === '0' || outcome === '1') {
+            actualOutcome = parseInt(outcome);
+        }
+    }
+    
+    const reason = prompt('Optional: Why do you think this? (or press Cancel to skip)') || '';
+    
+    const feedbackData = {
+        prediction_id: predictionId,
+        feedback: feedback.toLowerCase(),
+        reason: reason,
+        confidence_rating: 3,
+        user_id: 'manual_user'
+    };
+    
+    if (actualOutcome !== null) {
+        feedbackData.actual_outcome = actualOutcome;
+    }
+    
+    fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(feedbackData)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert('Thank you for your feedback!');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error submitting feedback');
+    });
 }
 </script>
 

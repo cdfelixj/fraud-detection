@@ -254,64 +254,7 @@
 
 {% block scripts %}
 <script>
-// Initialize charts when the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    initializeCharts();
-});
-
-function initializeCharts() {
-    // Amount Distribution Chart
-    const amountCtx = document.getElementById('amountDistributionChart').getContext('2d');
-    new Chart(amountCtx, {
-        type: 'bar',
-        data: {
-            labels: ['$0-$50', '$50-$100', '$100-$500', '$500-$1000', '$1000+'],
-            datasets: [{
-                label: 'Transaction Count',
-                data: [{{ normal_count or 0 }}, {{ fraud_count or 0 }}, 0, 0, 0],
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-
-    // Class Distribution Chart
-    const classCtx = document.getElementById('classDistributionChart').getContext('2d');
-    new Chart(classCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Normal', 'Fraud'],
-            datasets: [{
-                data: [{{ normal_count or 0 }}, {{ fraud_count or 0 }}],
-                backgroundColor: [
-                    'rgba(75, 192, 192, 0.6)',
-                    'rgba(255, 99, 132, 0.6)'
-                ],
-                borderColor: [
-                    'rgba(75, 192, 192, 1)',
-                    'rgba(255, 99, 132, 1)'
-                ],
-                borderWidth: 2
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-}
+// Charts will be initialized by dashboard.js
+// This ensures no conflicts with dynamic chart updates
 </script>
 {% endblock %}

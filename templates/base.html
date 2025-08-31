@@ -48,11 +48,6 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('run_predictions') }}">
-                            <i class="fas fa-search me-1"></i>Predict
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('manual_prediction') }}">
                             <i class="fas fa-edit me-1"></i>Manual Test
                         </a>
@@ -60,6 +55,16 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('view_transactions') }}">
                             <i class="fas fa-table me-1"></i>Transactions
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('prediction_validation') }}">
+                            <i class="fas fa-check-circle me-1"></i>Validation
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('feedback_dashboard') }}">
+                            <i class="fas fa-comments me-1"></i>Feedback
                         </a>
                     </li>
                     <li class="nav-item">

@@ -82,3 +82,23 @@ class FraudAlert(db.Model):
     
     transaction = db.relationship('Transaction', back_populates='alerts')
 
+class PredictionFeedback(db.Model):
+    __tablename__ = 'prediction_feedback'
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prediction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('predictions.id'), nullable=False)
+    transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), nullable=False)
+    user_feedback: Mapped[str] = mapped_column(String(20), nullable=False)  # 'correct', 'incorrect', 'uncertain'
+    actual_outcome: Mapped[int] = mapped_column(Integer)  # 0=normal, 1=fraud (if known)
+    feedback_reason: Mapped[str] = mapped_column(Text)  # Why user thinks it's correct/incorrect
+    confidence_rating: Mapped[int] = mapped_column(Integer)  # 1-5 scale of user confidence
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[str] = mapped_column(String(50))  # User identifier
+    
+    prediction = db.relationship('Prediction', back_populates='feedback')
+    transaction = db.relationship('Transaction', back_populates='feedback')
+
+# Add relationships to existing models
+Transaction.feedback = db.relationship('PredictionFeedback', back_populates='transaction')
+Prediction.feedback = db.relationship('PredictionFeedback', back_populates='prediction')
+

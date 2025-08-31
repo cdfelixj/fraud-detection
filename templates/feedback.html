@@ -1,0 +1,423 @@
+{% extends "base.html" %}
+
+{% block title %}Feedback Management - Credit Card Fraud Detection{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-comments me-3"></i>User Feedback Management</h2>
+        <div>
+            <button class="btn btn-primary me-2" onclick="retrainWithFeedback()">
+                <i class="fas fa-brain me-1"></i>Retrain with Feedback
+            </button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if feedback_stats %}
+    <!-- Feedback Statistics -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Feedback Statistics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-primary">{{ feedback_stats.total_feedback }}</h3>
+                            <p class="text-muted">Total Feedback</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-success">{{ feedback_stats.correct_feedback }}</h3>
+                            <p class="text-muted">Marked Correct</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-danger">{{ feedback_stats.incorrect_feedback }}</h3>
+                            <p class="text-muted">Marked Incorrect</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-warning">{{ feedback_stats.uncertain_feedback }}</h3>
+                            <p class="text-muted">Uncertain</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-info">{{ feedback_stats.feedback_with_outcomes }}</h3>
+                            <p class="text-muted">With Outcomes</p>
+                        </div>
+                        <div class="col-md-2 text-center">
+                            <h3 class="text-secondary">{{ "%.1f"|format(feedback_stats.agreement_rate * 100) }}%</h3>
+                            <p class="text-muted">Agreement Rate</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Distribution -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-pie-chart me-2"></i>Feedback Distribution
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="feedbackChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Feedback Insights
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>Model-User Agreement</h6>
+                        <div class="progress">
+                            <div class="progress-bar bg-success" style="width: {{ (feedback_stats.agreement_rate * 100)|round(1) }}%">
+                                {{ "%.1f"|format(feedback_stats.agreement_rate * 100) }}%
+                            </div>
+                        </div>
+                        <small class="text-muted">How often users and model agree on outcomes</small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-lightbulb me-2"></i>Recommendations</h6>
+                        <ul class="mb-0">
+                            {% if feedback_stats.incorrect_feedback > feedback_stats.correct_feedback %}
+                            <li>High incorrect feedback rate - consider model retraining</li>
+                            {% endif %}
+                            {% if feedback_stats.feedback_with_outcomes >= 10 %}
+                            <li>Sufficient feedback data available for model improvement</li>
+                            {% endif %}
+                            {% if feedback_stats.agreement_rate < 0.7 %}
+                            <li>Low agreement rate - investigate disagreement patterns</li>
+                            {% endif %}
+                            {% if feedback_stats.total_feedback == 0 %}
+                            <li>No feedback received yet - encourage user participation</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Problematic Predictions -->
+    {% if problematic_predictions %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-exclamation-circle me-2"></i>Problematic Predictions (Marked Incorrect)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Prediction ID</th>
+                                    <th>Transaction ID</th>
+                                    <th>Amount</th>
+                                    <th>Predicted</th>
+                                    <th>Actual</th>
+                                    <th>Confidence</th>
+                                    <th>Reason</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pred in problematic_predictions %}
+                                <tr>
+                                    <td>{{ pred.prediction_id }}</td>
+                                    <td>{{ pred.transaction_id }}</td>
+                                    <td>${{ "%.2f"|format(pred.amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if pred.predicted_class == 1 else 'success' }}">
+                                            {{ 'Fraud' if pred.predicted_class == 1 else 'Normal' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if pred.actual_class != -1 %}
+                                        <span class="badge bg-{{ 'danger' if pred.actual_class == 1 else 'success' }}">
+                                            {{ 'Fraud' if pred.actual_class == 1 else 'Normal' }}
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ "%.1f"|format(pred.confidence * 100) }}%</td>
+                                    <td>{{ pred.feedback_reason[:50] }}{% if pred.feedback_reason|length > 50 %}...{% endif %}</td>
+                                    <td>{{ pred.created_at.strftime('%m-%d %H:%M') }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Feedback -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Recent Feedback
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_feedback %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Prediction ID</th>
+                                    <th>Transaction ID</th>
+                                    <th>Amount</th>
+                                    <th>Predicted</th>
+                                    <th>Actual</th>
+                                    <th>User Feedback</th>
+                                    <th>Confidence</th>
+                                    <th>User</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for feedback in recent_feedback %}
+                                <tr>
+                                    <td>{{ feedback.prediction_id }}</td>
+                                    <td>{{ feedback.transaction_id }}</td>
+                                    <td>${{ "%.2f"|format(feedback.amount) }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if feedback.predicted_class == 1 else 'success' }}">
+                                            {{ 'Fraud' if feedback.predicted_class == 1 else 'Normal' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if feedback.actual_class != -1 %}
+                                        <span class="badge bg-{{ 'danger' if feedback.actual_class == 1 else 'success' }}">
+                                            {{ 'Fraud' if feedback.actual_class == 1 else 'Normal' }}
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Unknown</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if feedback.user_feedback == 'correct' else 'danger' if feedback.user_feedback == 'incorrect' else 'warning' }}">
+                                            {{ feedback.user_feedback.title() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ "%.1f"|format(feedback.confidence * 100) }}%</td>
+                                    <td>{{ feedback.created_by }}</td>
+                                    <td>{{ feedback.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info" onclick="viewFeedbackDetails({{ feedback.prediction_id }})">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-comments fa-3x text-muted mb-3"></i>
+                        <h5>No Feedback Yet</h5>
+                        <p class="text-muted">User feedback will appear here once predictions receive feedback.</p>
+                        <a href="{{ url_for('prediction_validation') }}" class="btn btn-primary">
+                            <i class="fas fa-eye me-1"></i>View Predictions
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- No feedback data -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-comments fa-3x text-muted mb-3"></i>
+                    <h4>No Feedback Data Available</h4>
+                    <p class="text-muted">Start collecting user feedback on predictions to see insights here.</p>
+                    <a href="{{ url_for('prediction_validation') }}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-eye me-2"></i>View Predictions
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Retrain Confirmation Modal -->
+<div class="modal fade" id="retrainModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Retrain Models with Feedback</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>This will retrain the fraud detection models using user feedback to improve accuracy.</p>
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-info-circle me-2"></i>What happens during retraining:</h6>
+                    <ul class="mb-0">
+                        <li>Models are retrained with feedback-corrected data</li>
+                        <li>Transactions with feedback get higher weight</li>
+                        <li>Model performance is re-evaluated</li>
+                        <li>Process may take several minutes</li>
+                    </ul>
+                </div>
+                
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="useFeedback" checked>
+                    <label class="form-check-label" for="useFeedback">
+                        Use feedback data for retraining (recommended)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="executeRetrain()">
+                    <i class="fas fa-brain me-1"></i>Start Retraining
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Feedback Chart
+{% if feedback_stats %}
+const ctx = document.getElementById('feedbackChart').getContext('2d');
+new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Correct', 'Incorrect', 'Uncertain'],
+        datasets: [{
+            data: [
+                {{ feedback_stats.correct_feedback }},
+                {{ feedback_stats.incorrect_feedback }},
+                {{ feedback_stats.uncertain_feedback }}
+            ],
+            backgroundColor: ['#28a745', '#dc3545', '#ffc107']
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+{% endif %}
+
+function retrainWithFeedback() {
+    const modal = new bootstrap.Modal(document.getElementById('retrainModal'));
+    modal.show();
+}
+
+function executeRetrain() {
+    const useFeedback = document.getElementById('useFeedback').checked;
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Retraining...';
+    button.disabled = true;
+    
+    fetch('/api/retrain-with-feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            use_feedback: useFeedback
+        })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert(result.message);
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error during retraining');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        bootstrap.Modal.getInstance(document.getElementById('retrainModal')).hide();
+    });
+}
+
+function viewFeedbackDetails(predictionId) {
+    fetch(`/api/feedback/${predictionId}`)
+    .then(response => response.json())
+    .then(result => {
+        if (result.error) {
+            alert('Error: ' + result.error);
+        } else {
+            let details = `Feedback for Prediction ${predictionId}:\n\n`;
+            result.feedback.forEach(f => {
+                details += `User: ${f.created_by}\n`;
+                details += `Feedback: ${f.feedback}\n`;
+                details += `Reason: ${f.reason}\n`;
+                details += `Confidence: ${f.confidence_rating}/5\n`;
+                details += `Date: ${f.created_at}\n\n`;
+            });
+            alert(details);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading feedback details');
+    });
+}
+</script>
+
+<style>
+.progress {
+    height: 25px;
+}
+
+.progress-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+}
+
+.table th {
+    border-top: none;
+}
+</style>
+{% endblock %}

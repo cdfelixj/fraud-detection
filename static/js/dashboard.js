@@ -7,6 +7,18 @@ let simulationInterval;
 let isSimulating = false;
 let realtimeChart;
 
+// Utility function to safely destroy charts
+function destroyChart(chartRef) {
+    if (chartRef && typeof chartRef.destroy === 'function') {
+        try {
+            chartRef.destroy();
+        } catch (e) {
+            console.warn('Error destroying chart:', e);
+        }
+    }
+    return null;
+}
+
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     initializeDashboard();
@@ -117,10 +129,7 @@ function updateAmountDistributionChart(data) {
     if (!ctx) return;
     
     // Destroy existing chart if it exists
-    if (charts.amountDistribution && typeof charts.amountDistribution.destroy === 'function') {
-        charts.amountDistribution.destroy();
-        charts.amountDistribution = null;
-    }
+    charts.amountDistribution = destroyChart(charts.amountDistribution);
     
     // Create amount bins
     const amounts = data.amounts || [];
@@ -172,10 +181,7 @@ function updateClassDistributionChart(data) {
     if (!ctx) return;
     
     // Destroy existing chart if it exists
-    if (charts.classDistribution && typeof charts.classDistribution.destroy === 'function') {
-        charts.classDistribution.destroy();
-        charts.classDistribution = null;
-    }
+    charts.classDistribution = destroyChart(charts.classDistribution);
     
     const normalCount = data.normal_amounts ? data.normal_amounts.length : 0;
     const fraudCount = data.fraud_amounts ? data.fraud_amounts.length : 0;
@@ -219,10 +225,7 @@ function updatePerformanceChart(data) {
     if (!ctx || !data.performance_history) return;
     
     // Destroy existing chart if it exists
-    if (charts.performance && typeof charts.performance.destroy === 'function') {
-        charts.performance.destroy();
-        charts.performance = null;
-    }
+    charts.performance = destroyChart(charts.performance);
     
     const performanceData = data.performance_history;
     
@@ -283,10 +286,7 @@ function updateTimeSeriesChart(data) {
     if (!ctx || !data.time_series) return;
     
     // Destroy existing chart if it exists
-    if (charts.timeSeries && typeof charts.timeSeries.destroy === 'function') {
-        charts.timeSeries.destroy();
-        charts.timeSeries = null;
-    }
+    charts.timeSeries = destroyChart(charts.timeSeries);
     
     const timeSeriesData = data.time_series;
     const normalData = timeSeriesData.filter(d => d.class === 0);
@@ -345,24 +345,43 @@ function createAmountBins(amounts) {
         return { labels: [], counts: [] };
     }
     
-    const min = Math.min(...amounts);
-    const max = Math.max(...amounts);
-    const binCount = 10;
-    const binSize = (max - min) / binCount;
+    // Sort amounts to get better distribution
+    const sortedAmounts = [...amounts].sort((a, b) => a - b);
+    const min = sortedAmounts[0];
+    const max = sortedAmounts[sortedAmounts.length - 1];
+    
+    // Create logarithmic bins for better distribution of transaction amounts
+    // Most transactions are small, so we need more granular bins for smaller amounts
+    const binRanges = [
+        [0, 50],
+        [50, 100], 
+        [100, 250],
+        [250, 500],
+        [500, 1000],
+        [1000, 2500],
+        [2500, 5000],
+        [5000, 10000],
+        [10000, 25000],
+        [25000, Infinity]
+    ];
     
     const bins = [];
     const labels = [];
     
-    for (let i = 0; i < binCount; i++) {
-        const binStart = min + (i * binSize);
-        const binEnd = min + ((i + 1) * binSize);
+    for (let i = 0; i < binRanges.length; i++) {
+        const [binStart, binEnd] = binRanges[i];
         
         const count = amounts.filter(amount => 
-            amount >= binStart && (i === binCount - 1 ? amount <= binEnd : amount < binEnd)
+            amount >= binStart && (binEnd === Infinity ? true : amount < binEnd)
         ).length;
         
         bins.push(count);
-        labels.push(`$${binStart.toFixed(0)}-$${binEnd.toFixed(0)}`);
+        
+        if (binEnd === Infinity) {
+            labels.push(`$${binStart.toLocaleString()}+`);
+        } else {
+            labels.push(`$${binStart.toLocaleString()}-$${binEnd.toLocaleString()}`);
+        }
     }
     
     return { labels, counts: bins };

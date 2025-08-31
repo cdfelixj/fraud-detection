@@ -115,6 +115,43 @@
                         </div>
                     </div>
                     {% endif %}
+                    
+                    <!-- Prediction Logging Statistics -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6>Prediction Logging:</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small>Total Predictions: <strong>{{ stats.total_predictions or 0 }}</strong></small>
+                                </div>
+                                <div class="col-md-6">
+                                    <small>With Ground Truth: <strong>{{ stats.predictions_with_ground_truth or 0 }}</strong></small>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <small>User Feedback: <strong>{{ stats.total_feedback or 0 }}</strong></small>
+                                </div>
+                                <div class="col-md-6">
+                                    {% if stats.total_feedback > 0 %}
+                                    <small>Latest: <strong>{{ stats.recent_feedback[0].user_feedback.title() if stats.recent_feedback else 'None' }}</strong></small>
+                                    {% else %}
+                                    <small>Latest: <strong>None</strong></small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% if stats.predictions_with_ground_truth > 0 %}
+                            <div class="mt-2">
+                                <a href="{{ url_for('prediction_validation') }}" class="btn btn-sm btn-outline-primary me-1">
+                                    <i class="fas fa-eye me-1"></i>View Validation
+                                </a>
+                                <a href="{{ url_for('feedback_dashboard') }}" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-comments me-1"></i>Manage Feedback
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -143,6 +180,9 @@
                     {% if stats.model_trained %}
                         <a href="{{ url_for('run_predictions') }}" class="btn btn-info w-100 mb-2">
                             <i class="fas fa-search me-2"></i>Run Predictions
+                        </a>
+                        <a href="{{ url_for('prediction_validation') }}" class="btn btn-warning w-100 mb-2">
+                            <i class="fas fa-check-circle me-2"></i>Validate Predictions
                         </a>
                     {% endif %}
                     
