@@ -59,6 +59,16 @@
                             <i class="fas fa-play me-2"></i>Quick Train (Default Settings)
                         </button>
                     </form>
+                    
+                    {% if model_trained %}
+                    <form method="POST" action="{{ url_for('train_models') }}" style="display: inline;" class="mb-2">
+                        <input type="hidden" name="action" value="clear_models">
+                        <button type="submit" class="btn btn-warning w-100 mb-2" onclick="return confirm('This will delete existing models. Are you sure?')">
+                            <i class="fas fa-trash me-2"></i>Clear Existing Models
+                        </button>
+                    </form>
+                    {% endif %}
+                    
                     <button class="btn btn-info w-100" onclick="loadDefaultParameters()">
                         <i class="fas fa-undo me-2"></i>Reset to Defaults
                     </button>

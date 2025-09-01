@@ -22,7 +22,7 @@ The Upload Data tab now provides **two upload methods** to efficiently handle di
 - **Automatic Suggestions**: System suggests Kafka upload for files over 5MB
 - **Size Limits**: 
   - Direct Upload: 10MB maximum
-  - Kafka Upload: 100MB maximum
+  - Kafka Upload: 1000MB maximum
 - **User Choice**: You can override suggestions and choose your preferred method
 
 ## 📊 Upload Method Comparison

@@ -96,7 +96,7 @@ class Prediction(db.Model):
 4. System processes existing transactions and saves predictions
 
 ### 2. Validate Manual Predictions
-1. Use "Manual Test" to create predictions
+1. Use "Manual" to create predictions
 2. Later update ground truth via API when actual outcome known
 3. View validation results in "Validation" dashboard
 

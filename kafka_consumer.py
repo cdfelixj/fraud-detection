@@ -98,15 +98,22 @@ class FraudDetectionConsumer:
                 if not transaction:
                     return
                 
-                # Make fraud prediction
-                prediction_result = self._make_fraud_prediction(transaction, transaction_data)
+                # Check if predictions are enabled for this transaction
+                enable_predictions = transaction_data.get('enable_predictions', True)  # Default to True for backward compatibility
                 
-                # Handle fraud alerts
-                if prediction_result and prediction_result['prediction'] == 1:
-                    self._create_fraud_alert(transaction, prediction_result)
-                
-                # Publish prediction result to Kafka
-                self._publish_prediction_result(transaction_data, prediction_result)
+                prediction_result = None
+                if enable_predictions:
+                    # Make fraud prediction
+                    prediction_result = self._make_fraud_prediction(transaction, transaction_data)
+                    
+                    # Handle fraud alerts
+                    if prediction_result and prediction_result['prediction'] == 1:
+                        self._create_fraud_alert(transaction, prediction_result)
+                    
+                    # Publish prediction result to Kafka
+                    self._publish_prediction_result(transaction_data, prediction_result)
+                else:
+                    logger.debug(f"Skipping prediction for transaction {transaction_data.get('transaction_id')} - predictions disabled")
                 
         except Exception as e:
             logger.error(f"Error processing transaction message: {e}")
@@ -166,10 +173,21 @@ class FraudDetectionConsumer:
                 transaction.amount
             ]
             
-            # Make prediction using ensemble_predict
+            # Scale features using the trained scaler
             import numpy as np
             features_array = np.array([features])  # Convert to 2D array for prediction
-            prediction_results = self.ml_models.ensemble_predict(features_array)
+            
+            # Apply scaling - the models were trained on scaled data
+            if hasattr(self.ml_models, 'data_processor') and self.ml_models.data_processor and hasattr(self.ml_models.data_processor.scaler, "scale_"):
+                features_scaled = self.ml_models.data_processor.scaler.transform(features_array)
+            else:
+                # Load data processor with scaler if not available
+                from data_processor import DataProcessor
+                data_proc = DataProcessor()
+                data_proc.load_scaler()
+                features_scaled = data_proc.scaler.transform(features_array)
+            
+            prediction_results = self.ml_models.ensemble_predict(features_scaled)
             
             if prediction_results is None:
                 logger.error("Failed to get prediction results")

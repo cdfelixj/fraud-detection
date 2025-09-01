@@ -140,10 +140,24 @@ def train_models():
     if request.method == 'GET':
         transaction_count = Transaction.query.count()
         latest_performance = ModelPerformance.query.order_by(ModelPerformance.evaluation_date.desc()).first()
+        
+        # Check if models are loaded but potentially stale/miscalibrated
+        models_warning = False
+        if ml_models.is_trained:
+            # Check if there are any recent predictions that seem suspicious (all high confidence fraud)
+            recent_predictions = Prediction.query.order_by(Prediction.prediction_time.desc()).limit(10).all()
+            if recent_predictions and len(recent_predictions) >= 5:
+                fraud_predictions = sum(1 for p in recent_predictions if p.final_prediction == 1)
+                high_conf_predictions = sum(1 for p in recent_predictions if p.confidence_score > 0.75)
+                if fraud_predictions >= 4 and high_conf_predictions >= 4:
+                    models_warning = True
+                    flash('Warning: Current models may be miscalibrated. Consider retraining with fresh data.', 'warning')
+        
         return render_template('train_enhanced.html', 
                              transaction_count=transaction_count,
                              model_trained=ml_models.is_trained,
-                             latest_performance=latest_performance)
+                             latest_performance=latest_performance,
+                             models_warning=models_warning)
     
     try:
         # Check if we have data
@@ -152,6 +166,30 @@ def train_models():
             return redirect(url_for('upload_data'))
         
         action = request.form.get('action', 'quick_train')
+        
+        if action == 'clear_models':
+            # Clear existing models to start fresh
+            try:
+                import os
+                # Remove saved model files
+                model_files = ['saved_models/isolation_forest.pkl', 'saved_models/logistic_model.pkl', 'scaler.pkl']
+                for file_path in model_files:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        logging.info(f"Removed {file_path}")
+                
+                # Reset ML models object
+                ml_models.isolation_forest = None
+                ml_models.logistic_model = None
+                ml_models.is_trained = False
+                
+                flash('Existing models cleared successfully. You can now train fresh models.', 'success')
+                return redirect(url_for('train_models'))
+                
+            except Exception as e:
+                logging.error(f"Error clearing models: {str(e)}")
+                flash(f'Error clearing models: {str(e)}', 'danger')
+                return redirect(url_for('train_models'))
         
         if action == 'custom_train':
             # Get custom parameters from form
@@ -1387,6 +1425,9 @@ def kafka_batch_upload():
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'Please upload a CSV file'}), 400
     
+    # Get the enable_predictions flag from the form
+    enable_predictions = request.form.get('enable_predictions', 'false').lower() == 'true'
+    
     try:
         # Save uploaded file temporarily
         temp_path = f'temp_kafka_upload_{int(datetime.utcnow().timestamp())}.csv'
@@ -1412,6 +1453,8 @@ def kafka_batch_upload():
                 'time_feature': float(row['time_feature']),
                 'amount': float(row['amount']),
                 'actual_class': int(row.get('actual_class', -1)),  # Ground truth if available
+                'enable_predictions': enable_predictions,  # Add the flag to each transaction
+                'source': 'kafka_batch_upload',
                 **{f'v{i}': float(row[f'v{i}']) for i in range(1, 29)}
             }
             transactions.append(transaction)
@@ -1427,6 +1470,7 @@ def kafka_batch_upload():
             'total_transactions': len(transactions),
             'sent_successfully': results['success'],
             'failed': results['failed'],
+            'predictions_enabled': enable_predictions,
             'timestamp': datetime.utcnow().isoformat()
         }), 200
         
