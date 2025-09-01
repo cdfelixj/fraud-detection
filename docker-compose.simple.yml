@@ -8,12 +8,6 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    healthcheck:
-      test: ["CMD", "sh", "-c", "echo srvr | nc localhost 2181"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
@@ -116,22 +110,20 @@ services:
       - ./attached_assets:/app/attached_assets
     restart: unless-stopped
 
-  # data-simulator:
-  #   build: .
-  #   command: python data_simulator.py
-  #   depends_on:
-  #     kafka:
-  #       condition: service_started
-  #   env_file:
-  #     - .env.kafka
-  #   environment:
-  #     - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-  #     - SIMULATION_MODE=single
-  #     - BASE_TPS=10
-  #     - FRAUD_RATE=0.02
-  #   restart: unless-stopped
-  #   # Uncomment this service if you want automatic data simulation
-  #   # For on-demand streaming, use the database streaming controls in the web dashboard
+  data-simulator:
+    build: .
+    command: python data_simulator.py
+    depends_on:
+      kafka:
+        condition: service_started
+    env_file:
+      - .env.kafka
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SIMULATION_MODE=single
+      - BASE_TPS=10
+      - FRAUD_RATE=0.02
+    restart: unless-stopped
 
 volumes:
   postgres_data:

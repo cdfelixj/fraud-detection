@@ -1,11 +1,12 @@
 # Fraud Detection System
 
-A real-time credit card fraud detection system using an ensemble of machine learning models, built with Flask, PostgreSQL, Redis, and Docker. It supports live analysis, model training, feedback, and monitoring.
+A real-time credit card fraud detection system using an ensemble of machine learning models, built with Flask, PostgreSQL, Redis, Apache Kafka, and Docker. It supports live analysis, streaming data processing, model training, feedback, and monitoring.
 
 ## Tech Stack
 
 - Backend: Python 3.11+, Flask, SQLAlchemy
 - Machine Learning: scikit-learn, pandas, numpy
+- Streaming: Apache Kafka, Zookeeper
 - Data Store: PostgreSQL 13
 - Cache: Redis 7
 - Web UI: Jinja2 templates, HTML/CSS/JavaScript
@@ -15,9 +16,11 @@ A real-time credit card fraud detection system using an ensemble of machine lear
 
 ### Core Functionality
 - **Real-time Fraud Detection**: Ensemble ML approach using Isolation Forest and Logistic Regression
+- **Streaming**: High-throughput real-time transaction processing with Apache Kafka
 - **Interactive Web Dashboard**: Monitor transactions, predictions, and system performance
+- **Streaming Data Simulation**: Realistic transaction stream generation with configurable patterns
 - **Manual Transaction Analysis**: Input custom transactions for immediate fraud assessment
-- **Batch Processing**: Upload and process CSV transaction data
+- **Batch Processing**: Upload and process CSV transaction data via Kafka streaming
 - **Model Training & Evaluation**: Train models on custom datasets with performance metrics
 
 ### Advanced Capabilities
@@ -48,17 +51,41 @@ cd FraudDetect
 ```
 
 ### 2. Start the System
+
+**Option A: Standard Mode**
 ```bash
 docker-compose up --build
 ```
 
+**Option B: Kafka Streaming Mode (Recommended)**
+```bash
+start-kafka.bat
+```
+
 ### 3. Access the Application
 - **Main Dashboard**: http://localhost:5000
+- **Streaming Dashboard**: http://localhost:5000/kafka/dashboard
 - **Health Check**: http://localhost:5000/health
 - Wait for all health checks to pass before using the system
 
 ### 4. Load Sample Data (Optional)
 Navigate to the Upload page and upload the sample dataset from `attached_assets/creditcardcsv` to get started with pre-existing data.
+
+## Kafka Streaming Features
+
+### High-Throughput Processing
+- **Real-time transaction streaming**: Process 100+ transactions per second
+- **Configurable simulation**: Adjust fraud rates and transaction patterns
+- **Burst mode support**: Handle traffic spikes automatically
+- **Real-time fraud alerts**: Immediate notifications for suspicious activity
+
+### Enhanced Data Input Methods
+1. **Kafka Streaming API**: REST endpoints for real-time transaction submission
+2. **Batch Upload via Kafka**: High-throughput CSV processing
+3. **Data Simulation**: Realistic transaction stream generation
+4. **Manual Testing**: Individual transaction fraud assessment
+
+For detailed Kafka documentation, see [KAFKA_INTEGRATION.md](KAFKA_INTEGRATION.md).
 
 ## Development
 

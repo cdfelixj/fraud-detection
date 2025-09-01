@@ -202,3 +202,70 @@ class DataProcessor:
         except Exception as e:
             logging.error(f"Error loading scaler: {str(e)}")
             return False
+    
+    def send_batch_to_kafka(self, processed_df):
+        """Send processed DataFrame to Kafka for real-time processing"""
+        try:
+            from kafka_producer import fraud_producer
+            from datetime import datetime
+            
+            # Convert DataFrame to transaction format for Kafka
+            transactions_for_kafka = []
+            for _, row in processed_df.iterrows():
+                transaction_kafka = {
+                    'transaction_id': f"upload_{int(datetime.now().timestamp() * 1000)}_{len(transactions_for_kafka)}",
+                    'time_feature': float(row['time_feature']),
+                    'amount': float(row['amount']),
+                    'source': 'csv_upload',
+                    'has_ground_truth': 'actual_class' in row and pd.notna(row['actual_class']),
+                    **{f'v{i}': float(row[f'v{i}']) for i in range(1, 29)}
+                }
+                
+                if 'actual_class' in row and pd.notna(row['actual_class']):
+                    transaction_kafka['actual_class'] = int(row['actual_class'])
+                
+                transactions_for_kafka.append(transaction_kafka)
+            
+            # Send batch to Kafka
+            kafka_results = fraud_producer.send_batch_transactions(transactions_for_kafka)
+            logging.info(f"Kafka batch upload: {kafka_results['success']} sent, {kafka_results['failed']} failed")
+            
+            return kafka_results
+            
+        except Exception as e:
+            logging.error(f"Error sending batch to Kafka: {str(e)}")
+            return {'success': 0, 'failed': len(processed_df)}
+    
+    def process_single_transaction_for_kafka(self, features):
+        """Process single transaction for Kafka streaming"""
+        try:
+            from kafka_producer import fraud_producer
+            from datetime import datetime
+            
+            # Create transaction dictionary
+            transaction_data = {
+                'transaction_id': f"single_{int(datetime.now().timestamp() * 1000)}",
+                'time_feature': float(features[0]),
+                'amount': float(features[-1]),
+                'source': 'manual_input',
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            # Add V1-V28 features
+            for i in range(1, 29):
+                idx = i  # features[0] is time_feature, features[1-28] are v1-v28, features[29] is amount
+                transaction_data[f'v{i}'] = float(features[idx]) if idx < len(features) - 1 else 0
+            
+            # Send to Kafka
+            success = fraud_producer.send_transaction(transaction_data)
+            
+            if success:
+                logging.info(f"Single transaction sent to Kafka: {transaction_data['transaction_id']}")
+                return transaction_data['transaction_id']
+            else:
+                logging.error("Failed to send transaction to Kafka")
+                return None
+                
+        except Exception as e:
+            logging.error(f"Error processing single transaction for Kafka: {str(e)}")
+            return None

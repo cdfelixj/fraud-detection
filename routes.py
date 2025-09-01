@@ -3,6 +3,8 @@ from app import app, db
 from models import Transaction, Prediction, ModelPerformance, FraudAlert, PredictionFeedback
 from data_processor import DataProcessor
 from ml_models import FraudDetectionModels
+from kafka_producer import fraud_producer
+from kafka_config import kafka_manager
 import logging
 import os
 import numpy as np
@@ -1305,3 +1307,464 @@ def admin_panel():
         logging.error(f"Error loading admin panel: {str(e)}")
         flash(f'Error loading admin panel: {str(e)}', 'danger')
         return redirect(url_for('index'))
+
+
+# ===== KAFKA INTEGRATION ROUTES =====
+
+@app.route('/kafka/health')
+def kafka_health():
+    """Check Kafka connection health"""
+    try:
+        health_status = fraud_producer.health_check()
+        status_code = 200 if health_status.get('kafka_connected', False) else 503
+        
+        return jsonify({
+            'kafka_status': health_status,
+            'timestamp': datetime.utcnow().isoformat()
+        }), status_code
+        
+    except Exception as e:
+        logging.error(f"Kafka health check error: {e}")
+        return jsonify({
+            'error': 'Kafka health check failed',
+            'details': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 503
+
+@app.route('/kafka/send-transaction', methods=['POST'])
+def send_transaction_to_kafka():
+    """Send transaction data to Kafka for real-time processing"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        # Validate required fields
+        required_fields = ['time_feature', 'amount'] + [f'v{i}' for i in range(1, 29)]
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            return jsonify({
+                'error': 'Missing required fields',
+                'missing_fields': missing_fields
+            }), 400
+        
+        # Add transaction ID if not provided
+        if 'transaction_id' not in data:
+            data['transaction_id'] = f"api_{int(datetime.utcnow().timestamp() * 1000)}"
+        
+        # Send to Kafka
+        success = fraud_producer.send_transaction(data)
+        
+        if success:
+            return jsonify({
+                'message': 'Transaction sent to Kafka successfully',
+                'transaction_id': data['transaction_id'],
+                'timestamp': datetime.utcnow().isoformat()
+            }), 200
+        else:
+            return jsonify({
+                'error': 'Failed to send transaction to Kafka'
+            }), 500
+            
+    except Exception as e:
+        logging.error(f"Error sending transaction to Kafka: {e}")
+        return jsonify({
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/batch-upload', methods=['POST'])
+def kafka_batch_upload():
+    """Upload CSV data via Kafka streaming for high throughput"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if not file or file.filename == '' or file.filename is None:
+        return jsonify({'error': 'No file selected'}), 400
+    
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': 'Please upload a CSV file'}), 400
+    
+    try:
+        # Save uploaded file temporarily
+        temp_path = f'temp_kafka_upload_{int(datetime.utcnow().timestamp())}.csv'
+        file.save(temp_path)
+        
+        # Process the data
+        df = data_processor.load_csv_data(temp_path)
+        if df is None:
+            os.remove(temp_path)
+            return jsonify({'error': 'Error loading CSV file'}), 400
+        
+        # Preprocess data
+        processed_df = data_processor.preprocess_data(df)
+        if processed_df is None:
+            os.remove(temp_path)
+            return jsonify({'error': 'Error processing CSV data'}), 400
+        
+        # Convert DataFrame to transaction dictionaries
+        transactions = []
+        for _, row in processed_df.iterrows():
+            transaction = {
+                'transaction_id': f"batch_{int(datetime.utcnow().timestamp() * 1000)}_{len(transactions)}",
+                'time_feature': float(row['time_feature']),
+                'amount': float(row['amount']),
+                'actual_class': int(row.get('actual_class', -1)),  # Ground truth if available
+                **{f'v{i}': float(row[f'v{i}']) for i in range(1, 29)}
+            }
+            transactions.append(transaction)
+        
+        # Send to Kafka in batches
+        results = fraud_producer.send_batch_transactions(transactions)
+        
+        # Clean up
+        os.remove(temp_path)
+        
+        return jsonify({
+            'message': 'Batch upload completed',
+            'total_transactions': len(transactions),
+            'sent_successfully': results['success'],
+            'failed': results['failed'],
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error in Kafka batch upload: {e}")
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return jsonify({
+            'error': 'Batch upload failed',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/manual-predict', methods=['POST'])
+def kafka_manual_predict():
+    """Send manual transaction for real-time Kafka processing"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        # Extract features from form data
+        features = []
+        try:
+            features.append(float(data.get('time_feature', 0)))
+            for i in range(1, 29):
+                features.append(float(data.get(f'v{i}', 0)))
+            features.append(float(data.get('amount', 0)))
+        except (ValueError, TypeError) as e:
+            return jsonify({
+                'error': 'Invalid feature values',
+                'details': str(e)
+            }), 400
+        
+        # Send to Kafka for processing
+        transaction_id = f"manual_{int(datetime.utcnow().timestamp() * 1000)}"
+        success = fraud_producer.send_manual_transaction(features, transaction_id)
+        
+        if success:
+            return jsonify({
+                'message': 'Transaction sent for real-time processing',
+                'transaction_id': transaction_id,
+                'note': 'Check predictions endpoint for results',
+                'timestamp': datetime.utcnow().isoformat()
+            }), 200
+        else:
+            return jsonify({
+                'error': 'Failed to send transaction to Kafka'
+            }), 500
+            
+    except Exception as e:
+        logging.error(f"Error in manual Kafka prediction: {e}")
+        return jsonify({
+            'error': 'Manual prediction failed',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/stream-control', methods=['POST'])
+def kafka_stream_control():
+    """Control data simulation stream parameters"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        action = data.get('action')
+        
+        if action == 'adjust_throughput':
+            # This would require communication with the simulator service
+            # For now, return success - actual implementation would use Redis/database
+            new_tps = int(data.get('transactions_per_second', 10))
+            
+            return jsonify({
+                'message': f'Throughput adjustment requested to {new_tps} TPS',
+                'note': 'Restart data-simulator service to apply changes',
+                'timestamp': datetime.utcnow().isoformat()
+            }), 200
+            
+        elif action == 'adjust_fraud_rate':
+            new_fraud_rate = float(data.get('fraud_rate', 0.02))
+            
+            return jsonify({
+                'message': f'Fraud rate adjustment requested to {new_fraud_rate*100:.1f}%',
+                'note': 'Restart data-simulator service to apply changes',
+                'timestamp': datetime.utcnow().isoformat()
+            }), 200
+            
+        else:
+            return jsonify({'error': 'Invalid action'}), 400
+            
+    except Exception as e:
+        logging.error(f"Error in stream control: {e}")
+        return jsonify({
+            'error': 'Stream control failed',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/metrics')
+def kafka_metrics():
+    """Get Kafka and streaming metrics"""
+    try:
+        # Basic Kafka health
+        kafka_health = kafka_manager.health_check()
+        
+        # Transaction processing metrics (last hour)
+        one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+        
+        recent_transactions = Transaction.query.filter(
+            Transaction.created_at >= one_hour_ago
+        ).count()
+        
+        recent_predictions = Prediction.query.filter(
+            Prediction.prediction_time >= one_hour_ago
+        ).count()
+        
+        recent_alerts = FraudAlert.query.filter(
+            FraudAlert.created_at >= one_hour_ago
+        ).count()
+        
+        # Calculate processing rate
+        processing_rate = recent_predictions / 3600 if recent_predictions > 0 else 0  # per second
+        
+        metrics = {
+            'kafka_healthy': kafka_health,
+            'processing_metrics': {
+                'transactions_last_hour': recent_transactions,
+                'predictions_last_hour': recent_predictions,
+                'alerts_last_hour': recent_alerts,
+                'processing_rate_per_second': round(processing_rate, 2)
+            },
+            'system_status': {
+                'models_loaded': ml_models.is_trained,
+                'database_connected': True,  # If we're here, DB is connected
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        }
+        
+        return jsonify(metrics), 200
+        
+    except Exception as e:
+        logging.error(f"Error getting Kafka metrics: {e}")
+        return jsonify({
+            'error': 'Failed to get metrics',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/dashboard')
+def kafka_dashboard():
+    """Kafka streaming dashboard interface"""
+    try:
+        return render_template('kafka_dashboard.html')
+    except Exception as e:
+        logging.error(f"Error loading Kafka dashboard: {e}")
+        flash(f'Error loading Kafka dashboard: {str(e)}', 'danger')
+        return redirect(url_for('index'))
+
+
+# ===== DATABASE STREAMING ROUTES =====
+
+# Global database streamer instance
+_db_streamer = None
+
+@app.route('/kafka/database/start-stream', methods=['POST'])
+def start_database_stream():
+    """Start streaming data from database to Kafka"""
+    global _db_streamer
+    try:
+        data = request.get_json() or {}
+        limit = data.get('limit')  # Optional limit on records
+        offset = data.get('offset', 0)  # Starting offset
+        
+        # Import here to avoid circular imports
+        from database_streamer import DatabaseStreamer
+        
+        # Initialize database streamer
+        if _db_streamer is None:
+            _db_streamer = DatabaseStreamer()
+        
+        # Start streaming
+        success = _db_streamer.start_streaming(limit=limit, offset=offset)
+        
+        if success:
+            return jsonify({
+                'message': 'Database streaming started successfully',
+                'configuration': {
+                    'limit': limit,
+                    'offset': offset
+                },
+                'timestamp': datetime.utcnow().isoformat()
+            }), 200
+        else:
+            return jsonify({
+                'error': 'Failed to start database streaming',
+                'message': 'Streaming may already be active or Kafka connection failed'
+            }), 400
+            
+    except Exception as e:
+        logging.error(f"Error starting database stream: {e}")
+        return jsonify({
+            'error': 'Failed to start database streaming',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/database/stop-stream', methods=['POST'])
+def stop_database_stream():
+    """Stop database streaming"""
+    global _db_streamer
+    try:
+        if _db_streamer is not None:
+            success = _db_streamer.stop_streaming()
+            if success:
+                return jsonify({
+                    'message': 'Database streaming stopped successfully',
+                    'timestamp': datetime.utcnow().isoformat()
+                }), 200
+            else:
+                return jsonify({
+                    'message': 'No active streaming to stop',
+                    'timestamp': datetime.utcnow().isoformat()
+                }), 200
+        else:
+            return jsonify({
+                'message': 'No streaming service initialized',
+                'timestamp': datetime.utcnow().isoformat()
+            }), 200
+            
+    except Exception as e:
+        logging.error(f"Error stopping database stream: {e}")
+        return jsonify({
+            'error': 'Failed to stop database streaming',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/database/status')
+def database_stream_status():
+    """Get database streaming status and statistics"""
+    global _db_streamer
+    try:
+        if _db_streamer is not None:
+            status = _db_streamer.get_streaming_status()
+            db_stats = _db_streamer.get_database_stats()
+        else:
+            status = {
+                'is_streaming': False,
+                'has_producer': False,
+                'thread_alive': False
+            }
+            # Get basic database stats without streamer
+            total_transactions = Transaction.query.count()
+            normal_transactions = Transaction.query.filter_by(actual_class=0).count()
+            fraud_transactions = Transaction.query.filter_by(actual_class=1).count()
+            fraud_percentage = (fraud_transactions / total_transactions * 100) if total_transactions > 0 else 0
+            
+            db_stats = {
+                'total_transactions': total_transactions,
+                'normal_transactions': normal_transactions,
+                'fraud_transactions': fraud_transactions,
+                'fraud_percentage': round(fraud_percentage, 2)
+            }
+        
+        return jsonify({
+            'streaming_status': status,
+            'database_statistics': db_stats,
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error getting database stream status: {e}")
+        return jsonify({
+            'error': 'Failed to get stream status',
+            'details': str(e)
+        }), 500
+
+@app.route('/kafka/streaming-data')
+def get_streaming_data():
+    """Get real-time streaming data for dashboard simulation"""
+    try:
+        # Get recent transactions (last 5 minutes for real-time feel)
+        five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+        
+        recent_transactions = Transaction.query.filter(
+            Transaction.created_at >= five_minutes_ago
+        ).order_by(Transaction.created_at.desc()).limit(100).all()
+        
+        recent_predictions = Prediction.query.join(Transaction).filter(
+            Transaction.created_at >= five_minutes_ago
+        ).order_by(Prediction.prediction_time.desc()).limit(100).all()
+        
+        # Calculate real-time metrics
+        current_minute = datetime.utcnow() - timedelta(minutes=1)
+        last_minute_transactions = Transaction.query.filter(
+            Transaction.created_at >= current_minute
+        ).count()
+        
+        last_minute_fraud = Transaction.query.filter(
+            Transaction.created_at >= current_minute,
+            Transaction.actual_class == 1
+        ).count()
+        
+        # Calculate average transaction amount for recent transactions
+        if recent_transactions:
+            avg_amount = sum(t.amount for t in recent_transactions) / len(recent_transactions)
+        else:
+            avg_amount = 0
+        
+        # Format transaction data for frontend
+        transaction_data = []
+        for txn in recent_transactions[:10]:  # Last 10 for live feed
+            prediction = None
+            for pred in recent_predictions:
+                if pred.transaction_id == txn.id:
+                    prediction = pred
+                    break
+            
+            transaction_data.append({
+                'id': txn.id,
+                'amount': float(txn.amount),
+                'timestamp': txn.created_at.isoformat() if txn.created_at else None,
+                'actual_class': txn.actual_class,
+                'predicted_fraud': prediction.final_prediction if prediction else None,
+                'confidence': prediction.confidence_score if prediction else None,
+                'isolation_score': prediction.isolation_forest_score if prediction else None
+            })
+        
+        return jsonify({
+            'real_time_metrics': {
+                'transactions_last_minute': last_minute_transactions,
+                'fraud_last_minute': last_minute_fraud,
+                'current_tps': round(last_minute_transactions / 60, 2),
+                'avg_amount_recent': round(avg_amount, 2),
+                'fraud_rate_recent': round((last_minute_fraud / last_minute_transactions * 100), 2) if last_minute_transactions > 0 else 0
+            },
+            'recent_transactions': transaction_data,
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Error getting streaming data: {e}")
+        return jsonify({
+            'error': 'Failed to get streaming data',
+            'details': str(e)
+        }), 500

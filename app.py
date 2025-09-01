@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
@@ -44,6 +45,15 @@ with app.app_context():
     try:
         db.create_all()
         logging.info("Database tables created successfully")
+        
+        # Initialize Kafka topics
+        try:
+            from kafka_config import create_topics_if_not_exist
+            create_topics_if_not_exist()
+            logging.info("Kafka topics initialized")
+        except Exception as kafka_error:
+            logging.warning(f"Kafka initialization failed (will retry): {kafka_error}")
+            
     except Exception as e:
         logging.error(f"Error creating database tables: {e}")
 
@@ -54,10 +64,29 @@ def health_check():
     try:
         # Test database connection
         db.session.execute(text('SELECT 1'))
-        return jsonify({"status": "healthy", "database": "connected"}), 200
+        db_healthy = True
     except Exception as e:
-        logging.error(f"Health check failed: {e}")
-        return jsonify({"status": "unhealthy", "error": str(e)}), 500
+        logging.error(f"Database health check failed: {e}")
+        db_healthy = False
+    
+    # Test Kafka connection
+    kafka_healthy = False
+    try:
+        from kafka_config import kafka_manager
+        kafka_healthy = kafka_manager.health_check()
+    except Exception as e:
+        logging.warning(f"Kafka health check failed: {e}")
+    
+    status = "healthy" if db_healthy else "unhealthy"
+    response_data = {
+        "status": status,
+        "database": "connected" if db_healthy else "disconnected",
+        "kafka": "connected" if kafka_healthy else "disconnected",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    status_code = 200 if db_healthy else 500
+    return jsonify(response_data), status_code
 
 # Import routes
 from routes import *
