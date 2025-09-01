@@ -22,10 +22,8 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Building and starting services...
-echo Services include: PostgreSQL, Redis, Zookeeper, Kafka, Web App, Consumer, Simulator
+echo Services include: PostgreSQL, Redis, Zookeeper, Kafka, Web App, Consumer
 echo This may take a few minutes on first run...
-echo.
-echo Note: If Kafka services fail to start, try: start-staged.bat
 echo.
 
 docker-compose up --build
