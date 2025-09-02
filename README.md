@@ -1,6 +1,6 @@
 # Fraud Detection System
 
-Enterprise-grade real-time credit card fraud detection platform leveraging ensemble machine learning models, distributed streaming architecture, and comprehensive monitoring capabilities.
+Real-time credit card fraud detection platform leveraging ensemble machine learning models, distributed streaming architecture, and comprehensive monitoring capabilities.
 
 ## Table of Contents
 
