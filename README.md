@@ -2,6 +2,9 @@
 
 Real-time credit card fraud detection platform leveraging ensemble machine learning models, distributed streaming architecture, and comprehensive monitoring capabilities.
 
+Data received from Kaggle:
+https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud/data
+
 ## Table of Contents
 
 - [Overview](#overview)
