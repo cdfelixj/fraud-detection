@@ -24,11 +24,11 @@ https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud/data
 
 ## Overview
 
-The Fraud Detection System is a Flask-based web application that identifies fraudulent credit card transactions using machine learning. The system processes transaction data through an ensemble of ML models and provides both web interface and API access for fraud prediction.
+The Fraud Detection System is a Flask-based web application that identifies fraudulent credit card transactions using machine learning. The system processes transaction data through an ensemble of ML models—including Isolation Forest, Logistic Regression, and XGBoost—and provides both web interface and API access for fraud prediction.
 
 ### Key Capabilities
 
-- **ML-Based Detection**: Ensemble approach using Isolation Forest and Logistic Regression
+- **ML-Based Detection**: Ensemble approach using Isolation Forest, Logistic Regression, and XGBoost
 - **Multiple Input Methods**: CSV upload, manual entry, and Kafka streaming
 - **Real-time Processing**: Immediate fraud scoring with confidence levels
 - **Web Dashboard**: Interactive interface for data upload, training, and monitoring
@@ -52,7 +52,7 @@ The Fraud Detection System is a Flask-based web application that identifies frau
 | Component | Purpose | Technology | Current Deployment |
 |-----------|---------|------------|-------------------|
 | Flask Application | Web interface and API endpoints | Flask 3.1.2+ | Single container (port 5000) |
-| ML Engine | Fraud detection inference | scikit-learn ensemble | Integrated with Flask app |
+| ML Engine | Fraud detection inference | scikit-learn, XGBoost | Integrated with Flask app |
 | Kafka Consumer | Real-time stream processing | Apache Kafka | Separate container service |
 | Data Store | Transaction persistence | PostgreSQL 13 | Single instance (port 5432) |
 | Cache Layer | Session storage | Redis 7 | Single instance (port 6379) |
@@ -62,17 +62,6 @@ The Fraud Detection System is a Flask-based web application that identifies frau
 
 ![Data Flow Diagram](DataDiagram.drawio.svg)
 
-## System Design
-
-### Design Principles
-
-1. **Microservices Architecture**: Loosely coupled services with clear boundaries
-2. **Event-Driven Design**: Asynchronous processing with message queues
-3. **Immutable Data**: Append-only transaction logs for audit compliance
-4. **Circuit Breaker Pattern**: Graceful degradation under load
-5. **Observability First**: Comprehensive logging, metrics, and tracing
-
-### Database Design
 
 ## Technology Stack
 
@@ -216,23 +205,7 @@ The application is configured through docker-compose.yml with the following defa
 | `DATABASE_URL` | PostgreSQL connection | Configured in docker-compose |
 | `REDIS_URL` | Redis connection | Configured in docker-compose |
 
-### Code Quality Standards
 
-#### Current Implementation
-
-The project follows basic Python coding standards:
-
-```bash
-# Available tools (if installed)
-python -m black . --line-length 88
-python -m flake8 . --max-line-length 88
-
-# Manual code review and testing
-# Docker-based development workflow
-# Git version control
-```
-
-### Development Workflow
 
 #### Current Workflow
 
@@ -451,35 +424,44 @@ All API responses follow a consistent error format:
 
 ### Ensemble Strategy
 
-The system employs a two-stage ensemble approach:
+The system employs a multi-stage ensemble approach:
 
 1. **Anomaly Detection**: Isolation Forest for unsupervised outlier detection
-2. **Classification**: Logistic Regression for supervised fraud classification
+2. **Classification**: Logistic Regression and XGBoost for supervised fraud classification
 3. **Ensemble Fusion**: Weighted combination of model outputs
 
 #### Model Configuration
 
 ```python
-# Isolation Forest Configuration
 isolation_forest_params = {
-    'n_estimators': 100,
-    'contamination': 0.1,
-    'random_state': 42,
-    'n_jobs': -1
+  'n_estimators': 100,
+  'contamination': 0.1,
+  'random_state': 42,
+  'n_jobs': -1
 }
 
-# Logistic Regression Configuration  
 logistic_regression_params = {
-    'max_iter': 1000,
-    'random_state': 42,
-    'class_weight': 'balanced',
-    'solver': 'liblinear'
+  'max_iter': 1000,
+  'random_state': 42,
+  'class_weight': 'balanced',
+  'solver': 'liblinear'
 }
 
-# Ensemble Weights
+# XGBoost Configuration
+xgboost_params = {
+  'n_estimators': 100,
+  'max_depth': 4,
+  'learning_rate': 0.1,
+  'subsample': 0.8,
+  'colsample_bytree': 0.8,
+  'random_state': 42,
+  'n_jobs': -1
+}
+
 ensemble_weights = {
-    'isolation_forest': 0.4,
-    'logistic_regression': 0.6
+  'isolation_forest': 0.3,
+  'logistic_regression': 0.3,
+  'xgboost': 0.4
 }
 ```
 
@@ -500,9 +482,9 @@ ensemble_weights = {
 1. **Data Upload**: Upload CSV file through web interface (/train endpoint)
 2. **Data Loading**: Load and validate CSV using data_processor.py
 3. **Feature Preparation**: Apply StandardScaler to V1-V28 features
-4. **Model Training**: Train Isolation Forest and Logistic Regression models
-5. **Model Evaluation**: Calculate performance metrics on test data
-6. **Model Persistence**: Save models as pickle files (isolation_forest.pkl, logistic_model.pkl)
+4. **Model Training**: Train Isolation Forest, Logistic Regression, and XGBoost models
+5. **Model Evaluation**: Calculate performance metrics on test data for all models
+6. **Model Persistence**: Save models as pickle files (isolation_forest.pkl, logistic_model.pkl, xgboost_model.pkl)
 7. **Performance Logging**: Store metrics in ModelPerformance database table
 8. **Model Activation**: Set is_trained flag to enable predictions
 
@@ -614,8 +596,11 @@ logger.error('Prediction failed', extra={'transaction_id': txn_id})
 ### Test Architecture
 
 #### Current Testing Status
-
-| Test Level | Status | Implementation |
+  "xgboost_prediction": 0,
+  "isolation_forest_confidence": 0.85,
+  "logistic_regression_confidence": 0.92,
+  "xgboost_confidence": 0.95,
+  "ensemble_confidence": 0.91
 |------------|--------|----------------|
 | **Unit Tests** | ❌ Not Implemented | pytest available in requirements.txt |
 | **Integration Tests** | ❌ Not Implemented | Could test API endpoints and database |
@@ -623,6 +608,7 @@ logger.error('Prediction failed', extra={'transaction_id': txn_id})
 | **End-to-End Tests** | ❌ Not Implemented | Web interface workflow testing |
 | **Performance Tests** | ❌ Not Implemented | Load testing for prediction endpoints |
 | **Security Tests** | ❌ Not Implemented | Input validation and vulnerability testing |
+| **XGBoost Model Tests** | ❌ Not Implemented | Add unit and integration tests for XGBoost |
 
 #### Current Testing Approach
 
