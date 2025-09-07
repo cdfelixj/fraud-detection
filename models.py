@@ -1,5 +1,6 @@
 from app import db
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -7,6 +8,7 @@ class Transaction(db.Model):
     __tablename__ = 'transactions'
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transaction_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True)
     time_feature: Mapped[float] = mapped_column(Float, nullable=False)
     v1: Mapped[float] = mapped_column(Float, nullable=False)
     v2: Mapped[float] = mapped_column(Float, nullable=False)
@@ -45,13 +47,13 @@ class Prediction(db.Model):
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), nullable=False)
-    isolation_forest_score: Mapped[float] = mapped_column(Float)
-    logistic_regression_score: Mapped[float] = mapped_column(Float)
-    xgboost_score: Mapped[float] = mapped_column(Float)
-    ensemble_prediction: Mapped[float] = mapped_column(Float)
-    final_prediction: Mapped[int] = mapped_column(Integer)  # 0=normal, 1=fraud
-    confidence_score: Mapped[float] = mapped_column(Float)
-    model_version: Mapped[str] = mapped_column(String(50))
+    isolation_forest_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
+    logistic_regression_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
+    xgboost_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
+    ensemble_prediction: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
+    final_prediction: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0)  # 0=normal, 1=fraud
+    confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.5)
+    model_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, default='v1.0')
     prediction_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     transaction = db.relationship('Transaction', back_populates='predictions')

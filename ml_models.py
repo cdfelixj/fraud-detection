@@ -70,8 +70,14 @@ class FraudDetectionModels:
                 }
             except ImportError as e:
                 logging.warning(f"Database imports not available: {e}")
-                return None, None
-        return self._db, self._models
+                return None, None, None, None, None
+        # Return in order: db, Transaction, Prediction, PredictionFeedback, FraudAlert, ModelPerformance
+        return (self._db, 
+                self._models['Transaction'], 
+                self._models['Prediction'], 
+                self._models['PredictionFeedback'], 
+                self._models['FraudAlert'], 
+                self._models['ModelPerformance'])
         
     def train_isolation_forest(self, X_train, contamination=0.002):
         """Train Isolation Forest for anomaly detection"""
@@ -333,9 +339,9 @@ class FraudDetectionModels:
             
             # Save to database
             try:
-                db, models = self._get_db_imports()
-                if db and models:
-                    ModelPerformance = models['ModelPerformance']
+                db_imports = self._get_db_imports()
+                if db_imports[0]:
+                    db, ModelPerformance = db_imports[0], db_imports[5]
                     
                     performance = ModelPerformance()
                     performance.model_name = 'Ensemble'
@@ -459,3 +465,363 @@ class FraudDetectionModels:
             
         except Exception as e:
             logging.error(f"Error updating parameters: {str(e)}")
+    
+    def predict_and_save_batch(self, transactions):
+        """
+        Make predictions for a batch of transactions and save to database
+        
+        Args:
+            transactions: List of transaction dictionaries or DataFrame
+        
+        Returns:
+            List of prediction results
+        """
+        try:
+            import pandas as pd
+            # Import database models when needed
+            db, Transaction, Prediction = self._get_db_imports()[:3]
+            
+            # Convert to DataFrame if not already
+            if not isinstance(transactions, pd.DataFrame):
+                df = pd.DataFrame(transactions)
+            else:
+                df = transactions.copy()
+            
+            # Prepare features for prediction using actual Transaction schema
+            feature_columns = ['time_feature'] + [f'v{i}' for i in range(1, 29)] + ['amount']
+            
+            # For existing transactions, extract features from the transaction objects
+            X_list = []
+            for i, (_, row) in enumerate(df.iterrows()):
+                if 'id' in row and row['id']:
+                    # Get from existing transaction in database
+                    transaction = Transaction.query.get(row['id'])
+                    if transaction:
+                        features = [transaction.time_feature] + [getattr(transaction, f'v{i}') for i in range(1, 29)] + [transaction.amount]
+                        X_list.append(features)
+                    else:
+                        # Use defaults if transaction not found
+                        features = [0.0] + [0.0] * 28 + [row.get('amount', 0.0)]
+                        X_list.append(features)
+                else:
+                    # Use provided features or defaults
+                    features = [
+                        row.get('time_feature', 0.0)
+                    ] + [
+                        row.get(f'v{i}', 0.0) for i in range(1, 29)
+                    ] + [
+                        row.get('amount', 0.0)
+                    ]
+                    X_list.append(features)
+            
+            import numpy as np
+            X = np.array(X_list)
+            
+            # Apply scaling - the models were trained on scaled data
+            try:
+                if hasattr(self, 'data_processor') and self.data_processor and hasattr(self.data_processor, 'scaler'):
+                    X_scaled = self.data_processor.scaler.transform(X)
+                else:
+                    # Load data processor with scaler if not available
+                    from data_processor import DataProcessor
+                    data_proc = DataProcessor()
+                    data_proc.load_scaler()
+                    X_scaled = data_proc.scaler.transform(X)
+            except Exception as e:
+                logging.warning(f"Could not apply scaling: {e}, using unscaled features")
+                X_scaled = X
+            
+            # Make ensemble predictions
+            predictions = self.ensemble_predict(X_scaled)
+            
+            if predictions is None:
+                logging.error("Failed to generate ensemble predictions")
+                return []
+            
+            results = []
+            
+            for i, (_, row) in enumerate(df.iterrows()):
+                try:
+                    # Create or get transaction record
+                    if 'id' in row and row['id']:
+                        # Transaction already exists, use the existing one
+                        transaction = Transaction.query.get(row['id'])
+                        if not transaction:
+                            logging.error(f"Transaction with ID {row['id']} not found")
+                            continue
+                    else:
+                        # Create new transaction (rarely used for batch processing)
+                        # Get next transaction_id based on existing count
+                        next_transaction_id = str(Transaction.query.count() + 1)
+                        
+                        transaction = Transaction(
+                            transaction_id=row.get('transaction_id', next_transaction_id),
+                            time_feature=float(row.get('time_feature', 0.0)),
+                            amount=float(row['amount']),
+                            actual_class=int(row.get('actual_class', 0))
+                        )
+                        # Set V1-V28 features
+                        for v_idx in range(1, 29):
+                            setattr(transaction, f'v{v_idx}', float(row.get(f'v{v_idx}', 0.0)))
+                        
+                        db.session.add(transaction)
+                        db.session.flush()  # Get the ID
+                    
+                    # Extract prediction data for this transaction
+                    isolation_score = float(predictions['isolation_scores'][i]) if predictions['isolation_scores'] is not None else 0.0
+                    logistic_score = float(predictions['logistic_probabilities'][i]) if predictions['logistic_probabilities'] is not None else 0.0
+                    xgboost_score = float(predictions['xgboost_probabilities'][i]) if predictions['xgboost_probabilities'] is not None else 0.0
+                    ensemble_score = float(predictions['ensemble_scores'][i]) if predictions['ensemble_scores'] is not None else 0.0
+                    is_fraud = bool(predictions['final_predictions'][i]) if predictions['final_predictions'] is not None else False
+                    confidence = float(predictions['confidence_scores'][i]) if predictions['confidence_scores'] is not None else 0.5
+                    
+                    # Create prediction record
+                    prediction = Prediction(
+                        transaction_id=transaction.id,
+                        final_prediction=1 if is_fraud else 0,
+                        isolation_forest_score=isolation_score,
+                        logistic_regression_score=logistic_score,
+                        xgboost_score=xgboost_score,
+                        ensemble_prediction=ensemble_score,
+                        confidence_score=confidence,
+                        model_version='ensemble_v1.0'
+                    )
+                    db.session.add(prediction)
+                    
+                    results.append({
+                        'transaction_id': transaction.transaction_id or f'txn_{transaction.id}',
+                        'prediction': is_fraud,
+                        'confidence': confidence,
+                        'ensemble_score': ensemble_score,
+                        'isolation_score': isolation_score,
+                        'logistic_score': logistic_score,
+                        'xgboost_score': xgboost_score
+                    })
+                    
+                except Exception as e:
+                    logging.error(f"Error processing transaction {i}: {str(e)}")
+                    continue
+            
+            # Commit all changes
+            db.session.commit()
+            logging.info(f"Successfully processed {len(results)} transactions")
+            
+            return results
+            
+        except Exception as e:
+            # Import database models when needed
+            db = self._get_db_imports()[0]
+            db.session.rollback()
+            logging.error(f"Error in batch prediction: {str(e)}")
+            return []
+    
+    def get_feedback_statistics(self):
+        """Get feedback statistics for the dashboard"""
+        try:
+            # Import database models when needed
+            db_imports = self._get_db_imports()
+            db, PredictionFeedback = db_imports[0], db_imports[3]
+            
+            total_feedback = PredictionFeedback.query.count()
+            correct_feedback = PredictionFeedback.query.filter_by(
+                user_feedback='correct'
+            ).count()
+            incorrect_feedback = PredictionFeedback.query.filter_by(
+                user_feedback='incorrect'
+            ).count()
+            
+            # Calculate agreement rate
+            agreement_rate = 0.0
+            if total_feedback > 0:
+                agreement_rate = (correct_feedback / total_feedback) * 100
+            
+            return {
+                'total_feedback': total_feedback,
+                'correct_feedback': correct_feedback,
+                'incorrect_feedback': incorrect_feedback,
+                'agreement_rate': round(agreement_rate, 2)
+            }
+            
+        except Exception as e:
+            logging.error(f"Error getting feedback statistics: {str(e)}")
+            return {
+                'total_feedback': 0,
+                'correct_feedback': 0,
+                'incorrect_feedback': 0,
+                'agreement_rate': 0.0
+            }
+    
+    def get_problematic_predictions(self, limit=10):
+        """Get predictions that have been marked as incorrect for review"""
+        try:
+            # Import database models when needed
+            db, Transaction, Prediction, PredictionFeedback = self._get_db_imports()
+            
+            # Query for predictions marked as incorrect
+            problematic = db.session.query(
+                Prediction, Transaction, PredictionFeedback
+            ).join(
+                Transaction, Prediction.transaction_id == Transaction.id
+            ).join(
+                PredictionFeedback, Prediction.id == PredictionFeedback.prediction_id
+            ).filter(
+                PredictionFeedback.user_feedback == 'incorrect'
+            ).order_by(
+                PredictionFeedback.created_at.desc()
+            ).limit(limit).all()
+            
+            result = []
+            for prediction, transaction, feedback in problematic:
+                result.append({
+                    'prediction_id': prediction.id,
+                    'transaction_id': transaction.id,
+                    'amount': float(transaction.amount),
+                    'predicted_fraud': prediction.final_prediction,
+                    'isolation_score': prediction.isolation_forest_score,
+                    'logistic_score': prediction.logistic_regression_score,
+                    'xgboost_score': prediction.xgboost_score,
+                    'ensemble_score': prediction.ensemble_prediction,
+                    'feedback_date': feedback.created_at.isoformat(),
+                    'feedback_comment': feedback.comment
+                })
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Error getting problematic predictions: {str(e)}")
+            return []
+    
+    def create_fraud_alerts(self, fraud_transactions, prediction_results):
+        """
+        Create fraud alerts for transactions predicted as fraudulent
+        
+        Args:
+            fraud_transactions: List of transactions predicted as fraud
+            prediction_results: Dictionary containing prediction results
+        """
+        try:
+            # Import database models when needed
+            db, Transaction, Prediction, FraudAlert = self._get_db_imports()[:4]
+            
+            alerts_created = 0
+            
+            for i, transaction in enumerate(fraud_transactions):
+                try:
+                    # Get the prediction result for this transaction
+                    if isinstance(prediction_results, dict):
+                        if 'final_predictions' in prediction_results:
+                            is_fraud = prediction_results['final_predictions'][i] == 1
+                            confidence = prediction_results.get('confidence_scores', [0.5])[i] if 'confidence_scores' in prediction_results else 0.5
+                            ensemble_score = prediction_results.get('ensemble_scores', [0.5])[i] if 'ensemble_scores' in prediction_results else 0.5
+                        else:
+                            continue
+                    else:
+                        continue
+                    
+                    # Only create alerts for high-confidence fraud predictions
+                    if is_fraud and confidence > 0.7:
+                        # For batch processing, transactions will be dictionaries with 'id'
+                        # For routes.py calls, they might be Transaction objects
+                        transaction_id = None
+                        amount = 0
+                        
+                        if isinstance(transaction, dict):
+                            transaction_id = transaction.get('id')
+                            amount = float(transaction.get('amount', 0))
+                        else:
+                            # Assume it's a Transaction object
+                            transaction_id = transaction.id
+                            amount = float(transaction.amount)
+                        
+                        if not transaction_id:
+                            continue
+                            
+                        # Check if alert already exists for this transaction
+                        existing_alert = FraudAlert.query.filter_by(
+                            transaction_id=transaction_id
+                        ).first()
+                        
+                        if not existing_alert:
+                            # Determine alert level based on confidence and amount
+                            if confidence > 0.95 or amount > 10000:
+                                alert_level = 'HIGH'
+                            elif confidence > 0.85 or amount > 5000:
+                                alert_level = 'MEDIUM'
+                            else:
+                                alert_level = 'LOW'
+                            
+                            # Create fraud alert
+                            alert = FraudAlert(
+                                transaction_id=transaction_id,
+                                alert_level=alert_level,
+                                alert_reason=f"High-confidence fraud prediction (confidence: {confidence:.2f}, amount: ${amount:.2f})"
+                            )
+                            db.session.add(alert)
+                            alerts_created += 1
+                
+                except Exception as e:
+                    logging.error(f"Error creating alert for transaction {i}: {str(e)}")
+                    continue
+            
+            if alerts_created > 0:
+                db.session.commit()
+                logging.info(f"Created {alerts_created} fraud alerts")
+            
+            return alerts_created
+            
+        except Exception as e:
+            # Import database models when needed
+            db = self._get_db_imports()[0]
+            db.session.rollback()
+            logging.error(f"Error creating fraud alerts: {str(e)}")
+            return 0
+    
+    def assign_transaction_ids(self):
+        """
+        Assign transaction_ids to transactions that don't have them yet.
+        Uses the order of creation (based on database ID) as the transaction_id.
+        """
+        try:
+            # Import database models when needed
+            db, Transaction = self._get_db_imports()[:2]
+            
+            # Get transactions without transaction_id, ordered by ID (creation order)
+            transactions_without_id = Transaction.query.filter(
+                Transaction.transaction_id.is_(None)
+            ).order_by(Transaction.id).all()
+            
+            if not transactions_without_id:
+                logging.info("All transactions already have transaction_ids")
+                return 0
+            
+            # Get the highest existing transaction_id (as integer)
+            max_existing = db.session.query(Transaction.transaction_id).filter(
+                Transaction.transaction_id.isnot(None)
+            ).all()
+            
+            next_id = 1
+            if max_existing:
+                try:
+                    max_id = max([int(tid[0]) for tid in max_existing if tid[0] and tid[0].isdigit()])
+                    next_id = max_id + 1
+                except (ValueError, TypeError):
+                    # If existing transaction_ids are not numeric, start from transaction count
+                    next_id = Transaction.query.filter(Transaction.transaction_id.isnot(None)).count() + 1
+            
+            # Assign transaction_ids in order
+            updated_count = 0
+            for transaction in transactions_without_id:
+                transaction.transaction_id = str(next_id)
+                next_id += 1
+                updated_count += 1
+            
+            db.session.commit()
+            logging.info(f"Assigned transaction_ids to {updated_count} transactions")
+            return updated_count
+            
+        except Exception as e:
+            # Import database models when needed
+            db = self._get_db_imports()[0]
+            db.session.rollback()
+            logging.error(f"Error assigning transaction_ids: {str(e)}")
+            return 0

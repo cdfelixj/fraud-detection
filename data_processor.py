@@ -72,8 +72,9 @@ class DataProcessor:
             
             # Convert DataFrame to Transaction records
             transactions = []
-            for _, row in df.iterrows():
+            for idx, (_, row) in enumerate(df.iterrows(), 1):  # Start transaction_id from 1
                 transaction = Transaction()
+                transaction.transaction_id = str(idx)  # Set transaction_id based on order
                 transaction.time_feature = float(row['time_feature'])
                 transaction.v1 = float(row['v1'])
                 transaction.v2 = float(row['v2'])

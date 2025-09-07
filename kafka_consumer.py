@@ -145,13 +145,16 @@ class FraudDetectionConsumer:
             # Set actual class (required field)
             transaction.actual_class = int(data.get('actual_class', 0))  # Default to 0 (normal) if not provided
             
+            # Set transaction_id based on order (use provided transaction_id if available)
+            transaction.transaction_id = data.get('transaction_id', str(data.get('order', Transaction.query.count() + 1)))
+            
             # Set metadata
             transaction.created_at = datetime.utcnow()
             
             db.session.add(transaction)
             db.session.commit()
             
-            logger.debug(f"Transaction {transaction.id} saved to database")
+            logger.debug(f"Transaction {transaction.transaction_id} (ID: {transaction.id}) saved to database")
             return transaction
             
         except Exception as e:
@@ -196,20 +199,21 @@ class FraudDetectionConsumer:
             # Extract results
             prediction = int(prediction_results['final_predictions'][0])
             confidence = float(prediction_results['confidence_scores'][0])
-            model_scores = {
-                'isolation_forest': float(prediction_results['isolation_scores'][0]),
-                'logistic_regression': float(prediction_results['logistic_probabilities'][0]),
-                'ensemble': float(prediction_results['ensemble_scores'][0])
-            }
+            ensemble_score = float(prediction_results['ensemble_scores'][0])
+            isolation_score = float(prediction_results['isolation_scores'][0]) if prediction_results['isolation_scores'] is not None else 0.0
+            logistic_score = float(prediction_results['logistic_probabilities'][0]) if prediction_results['logistic_probabilities'] is not None else 0.0
+            xgboost_score = float(prediction_results['xgboost_probabilities'][0]) if prediction_results['xgboost_probabilities'] is not None else 0.0
             
-            # Save prediction record - using SQLAlchemy model assignment
+            # Save prediction record - using correct column names
             pred_record = Prediction()
             pred_record.transaction_id = transaction.id
-            pred_record.isolation_forest_score = float(model_scores.get('isolation_forest', 0))
-            pred_record.ensemble_prediction = float(confidence)
+            pred_record.isolation_forest_score = isolation_score
+            pred_record.logistic_regression_score = logistic_score
+            pred_record.xgboost_score = xgboost_score
+            pred_record.ensemble_prediction = ensemble_score
             pred_record.final_prediction = prediction
-            pred_record.confidence_score = float(confidence)
-            pred_record.model_version = 'kafka_v1.0'
+            pred_record.confidence_score = confidence
+            pred_record.model_version = 'kafka_ensemble_v1.0'
             pred_record.prediction_time = datetime.utcnow()
             
             db.session.add(pred_record)
@@ -219,7 +223,12 @@ class FraudDetectionConsumer:
                 'transaction_id': original_data['transaction_id'],
                 'prediction': prediction,
                 'confidence': float(confidence),
-                'model_scores': model_scores,
+                'model_scores': {
+                    'isolation_forest': isolation_score,
+                    'logistic_regression': logistic_score,
+                    'xgboost': xgboost_score,
+                    'ensemble': ensemble_score
+                },
                 'timestamp': datetime.utcnow().isoformat()
             }
             

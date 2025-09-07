@@ -119,6 +119,11 @@ def upload_data():
         
         # Save to database
         if data_processor.save_to_database(processed_df):
+            # Assign transaction_ids to any transactions that don't have them
+            assigned_count = ml_models.assign_transaction_ids()
+            if assigned_count > 0:
+                logging.info(f"Assigned transaction_ids to {assigned_count} transactions")
+            
             flash(f'Successfully uploaded and processed {len(processed_df)} transactions', 'success')
             logging.info(f"Uploaded {len(processed_df)} transactions")
         else:
@@ -331,21 +336,23 @@ def run_predictions():
         for i, txn in enumerate(transactions):
             prediction = Prediction()
             prediction.transaction_id = txn.id
-            prediction.isolation_forest_score = float(results['isolation_scores'][i])
+            prediction.isolation_forest_score = float(results['isolation_scores'][i]) if results['isolation_scores'] is not None else 0.0
+            prediction.logistic_regression_score = float(results['logistic_probabilities'][i]) if results['logistic_probabilities'] is not None else 0.0
+            prediction.xgboost_score = float(results['xgboost_probabilities'][i]) if results['xgboost_probabilities'] is not None else 0.0
             
             # Handle potential NaN values
-            ensemble_score = float(results['ensemble_scores'][i])
+            ensemble_score = float(results['ensemble_scores'][i]) if results['ensemble_scores'] is not None else 0.5
             if np.isnan(ensemble_score):
                 ensemble_score = 0.5
             
-            confidence_score = float(results['confidence_scores'][i])
+            confidence_score = float(results['confidence_scores'][i]) if results['confidence_scores'] is not None else 0.5
             if np.isnan(confidence_score):
                 confidence_score = 0.5
             
             prediction.ensemble_prediction = ensemble_score
-            prediction.final_prediction = int(results['final_predictions'][i])
+            prediction.final_prediction = int(results['final_predictions'][i]) if results['final_predictions'] is not None else 0
             prediction.confidence_score = confidence_score
-            prediction.model_version = 'v1.0'
+            prediction.model_version = 'ensemble_v1.0'
             db.session.add(prediction)
             predictions_saved += 1
         
@@ -813,13 +820,24 @@ def api_batch_predict():
         if not transactions:
             return jsonify({"message": "No transactions found for prediction", "predictions_saved": 0})
         
-        # Generate and save predictions
-        success = ml_models.predict_and_save_batch(transactions)
+        # Convert Transaction objects to dictionaries for predict_and_save_batch
+        transaction_dicts = []
+        for txn in transactions:
+            txn_dict = {
+                'id': txn.id,  # Include the database ID for existing transactions
+                'transaction_id': txn.transaction_id or f'txn_{txn.id}',  # Use transaction_id if available
+                'amount': float(txn.amount)
+            }
+            transaction_dicts.append(txn_dict)
         
-        if success:
+        # Generate and save predictions
+        results = ml_models.predict_and_save_batch(transaction_dicts)
+        
+        if results:
             return jsonify({
-                "message": f"Successfully generated predictions for {len(transactions)} transactions",
-                "predictions_saved": len(transactions)
+                "message": f"Successfully generated predictions for {len(results)} transactions",
+                "predictions_saved": len(results),
+                "results": results
             })
         else:
             return jsonify({"error": "Failed to generate batch predictions"}), 500
