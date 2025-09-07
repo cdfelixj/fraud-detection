@@ -31,28 +31,20 @@
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-2 text-center">
+                        <div class="col-md-3 text-center">
                             <h3 class="text-primary">{{ feedback_stats.total_feedback }}</h3>
                             <p class="text-muted">Total Feedback</p>
                         </div>
-                        <div class="col-md-2 text-center">
+                        <div class="col-md-3 text-center">
                             <h3 class="text-success">{{ feedback_stats.correct_feedback }}</h3>
                             <p class="text-muted">Marked Correct</p>
                         </div>
-                        <div class="col-md-2 text-center">
+                        <div class="col-md-3 text-center">
                             <h3 class="text-danger">{{ feedback_stats.incorrect_feedback }}</h3>
                             <p class="text-muted">Marked Incorrect</p>
                         </div>
-                        <div class="col-md-2 text-center">
-                            <h3 class="text-warning">{{ feedback_stats.uncertain_feedback }}</h3>
-                            <p class="text-muted">Uncertain</p>
-                        </div>
-                        <div class="col-md-2 text-center">
-                            <h3 class="text-info">{{ feedback_stats.feedback_with_outcomes }}</h3>
-                            <p class="text-muted">With Outcomes</p>
-                        </div>
-                        <div class="col-md-2 text-center">
-                            <h3 class="text-secondary">{{ "%.1f"|format(feedback_stats.agreement_rate * 100) }}%</h3>
+                        <div class="col-md-3 text-center">
+                            <h3 class="text-info">{{ "%.1f"|format(feedback_stats.agreement_rate) }}%</h3>
                             <p class="text-muted">Agreement Rate</p>
                         </div>
                     </div>
@@ -100,7 +92,7 @@
                             {% if feedback_stats.incorrect_feedback > feedback_stats.correct_feedback %}
                             <li>High incorrect feedback rate - consider model retraining</li>
                             {% endif %}
-                            {% if feedback_stats.feedback_with_outcomes >= 10 %}
+                            {% if feedback_stats.total_feedback >= 10 %}
                             <li>Sufficient feedback data available for model improvement</li>
                             {% endif %}
                             {% if feedback_stats.agreement_rate < 0.7 %}
@@ -137,7 +129,6 @@
                                     <th>Predicted</th>
                                     <th>Actual</th>
                                     <th>Confidence</th>
-                                    <th>Reason</th>
                                     <th>Date</th>
                                 </tr>
                             </thead>
@@ -162,7 +153,6 @@
                                         {% endif %}
                                     </td>
                                     <td>{{ "%.1f"|format(pred.confidence * 100) }}%</td>
-                                    <td>{{ pred.feedback_reason[:50] }}{% if pred.feedback_reason|length > 50 %}...{% endif %}</td>
                                     <td>{{ pred.created_at.strftime('%m-%d %H:%M') }}</td>
                                 </tr>
                                 {% endfor %}
@@ -318,14 +308,13 @@ const ctx = document.getElementById('feedbackChart').getContext('2d');
 new Chart(ctx, {
     type: 'doughnut',
     data: {
-        labels: ['Correct', 'Incorrect', 'Uncertain'],
+        labels: ['Correct', 'Incorrect'],
         datasets: [{
             data: [
                 {{ feedback_stats.correct_feedback }},
-                {{ feedback_stats.incorrect_feedback }},
-                {{ feedback_stats.uncertain_feedback }}
+                {{ feedback_stats.incorrect_feedback }}
             ],
-            backgroundColor: ['#28a745', '#dc3545', '#ffc107']
+            backgroundColor: ['#28a745', '#dc3545']
         }]
     },
     options: {
@@ -392,8 +381,6 @@ function viewFeedbackDetails(predictionId) {
             result.feedback.forEach(f => {
                 details += `User: ${f.created_by}\n`;
                 details += `Feedback: ${f.feedback}\n`;
-                details += `Reason: ${f.reason}\n`;
-                details += `Confidence: ${f.confidence_rating}/5\n`;
                 details += `Date: ${f.created_at}\n\n`;
             });
             alert(details);

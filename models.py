@@ -39,14 +39,13 @@ class Transaction(db.Model):
     v27: Mapped[float] = mapped_column(Float, nullable=False)
     v28: Mapped[float] = mapped_column(Float, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
-    actual_class: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=normal, 1=fraud
+    actual_class: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0=normal, 1=fraud, None=unknown
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class Prediction(db.Model):
     __tablename__ = 'predictions'
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), nullable=False)
+    transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), primary_key=True)
     isolation_forest_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
     logistic_regression_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
     xgboost_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
@@ -90,7 +89,7 @@ class PredictionFeedback(db.Model):
     __tablename__ = 'prediction_feedback'
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    prediction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('predictions.id'), nullable=False)
+    prediction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('predictions.transaction_id'), nullable=False)
     transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), nullable=False)
     user_feedback: Mapped[str] = mapped_column(String(20), nullable=False)  # 'correct', 'incorrect', 'uncertain'
     actual_outcome: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 0=normal, 1=fraud (required)

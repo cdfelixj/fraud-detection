@@ -175,9 +175,33 @@
                                 <li><code>Time</code> - Transaction time</li>
                                 <li><code>V1</code> to <code>V28</code> - PCA-transformed features</li>
                                 <li><code>Amount</code> - Transaction amount</li>
-                                <li><code>Class</code> - Fraud label (0=normal, 1=fraud)</li>
                             </ul>
                         </div>
+                        <div class="col-md-6">
+                            <h6>Optional Columns:</h6>
+                            <ul class="list-unstyled">
+                                <li><code>Class</code> - Fraud label (0=normal, 1=fraud)</li>
+                                <li><i class="fas fa-info-circle text-info me-2"></i>Only needed for training</li>
+                                <li><i class="fas fa-info-circle text-info me-2"></i>Can upload without for prediction only</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-lightbulb me-2"></i>
+                        <strong>Data Types:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li><strong>For Training:</strong> Include the Class column with fraud labels (0=normal, 1=fraud)</li>
+                            <li><strong>For Prediction Only:</strong> Omit the Class column - transactions will be marked as unlabeled</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="alert alert-success mt-3">
+                        <i class="fas fa-cog me-2"></i>
+                        <strong>Automatic Processing:</strong> Both upload methods handle data preprocessing, feature scaling, and validation automatically for optimal model performance.
+                    </div>
+                    
+                    <div class="row mt-3">
                         <div class="col-md-6">
                             <h6>Data Requirements:</h6>
                             <ul class="list-unstyled">
@@ -187,11 +211,14 @@
                                 <li><i class="fas fa-check text-success me-2"></i>Header row included</li>
                             </ul>
                         </div>
-                    </div>
-                    
-                    <div class="alert alert-success mt-3">
-                        <i class="fas fa-cog me-2"></i>
-                        <strong>Automatic Processing:</strong> Both upload methods handle data preprocessing, feature scaling, and validation automatically for optimal model performance.
+                        <div class="col-md-6">
+                            <h6>Use Cases:</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-graduation-cap text-primary me-2"></i>Training: Include Class column</li>
+                                <li><i class="fas fa-search text-info me-2"></i>Prediction: Omit Class column</li>
+                                <li><i class="fas fa-chart-line text-success me-2"></i>Validation: Include Class column</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -235,7 +262,10 @@
                                     <td>...</td>
                                     <td>0.014724</td>
                                     <td>2.69</td>
-                                    <td>0</td>
+                                    <td>1</td>
+                                </tr>
+                                <tr class="table-secondary">
+                                    <td colspan="7" class="text-center"><em>Class column is optional - can be omitted for prediction-only data</em></td>
                                 </tr>
                             </tbody>
                         </table>

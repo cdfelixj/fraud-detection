@@ -166,7 +166,7 @@
                             </thead>
                             <tbody>
                                 {% for pred in recent_predictions %}
-                                <tr class="{% if pred.is_correct %}table-success{% else %}table-danger{% endif %}">
+                                <tr class="{% if pred.is_correct %}table-success{% else %}table-danger{% endif %}" data-prediction-id="{{ pred.prediction_id if pred.prediction_id else '' }}">
                                     <td>{{ pred.transaction_id }}</td>
                                     <td>${{ "%.2f"|format(pred.amount) }}</td>
                                     <td>
@@ -192,7 +192,7 @@
                                         <button class="btn btn-sm btn-outline-info me-1" onclick="showPredictionDetails({{ pred.transaction_id }})">
                                             <i class="fas fa-eye"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-outline-primary" onclick="provideFeedback({{ pred.transaction_id }}, {{ pred.predicted_class }})">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="provideFeedback({{ pred.transaction_id }}, {{ pred.predicted_class }}, {{ pred.prediction_id if pred.prediction_id else 'null' }})">
                                             <i class="fas fa-comment"></i>
                                         </button>
                                     </td>
@@ -213,10 +213,23 @@
             <div class="card">
                 <div class="card-body text-center">
                     <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
-                    <h4>No Validation Data Available</h4>
-                    <p class="text-muted">Generate predictions on existing transactions to see validation metrics.</p>
+                    <h4>No Predictions Available</h4>
+                    <p class="text-muted">You need to generate predictions on existing transactions before you can submit feedback or view validation metrics.</p>
+                    
+                    <div class="alert alert-info d-inline-block text-start">
+                        <h6><i class="fas fa-lightbulb me-2"></i>Getting Started:</h6>
+                        <ol class="mb-0">
+                            <li>Click "Generate Predictions" to analyze existing transactions</li>
+                            <li>Review the predictions and their confidence scores</li>
+                            <li>Provide feedback on whether predictions are correct or incorrect</li>
+                            <li>Use the feedback to retrain and improve the model</li>
+                        </ol>
+                    </div>
+                    
+                    <br><br>
                     <button class="btn btn-primary btn-lg" onclick="generateBatchPredictions()">
                         <i class="fas fa-brain me-2"></i>Generate Predictions
+                    </button>
                     </button>
                 </div>
             </div>
@@ -247,36 +260,10 @@
                     
                     <div class="mb-3">
                         <label for="userFeedback" class="form-label">Is this prediction correct?</label>
-                        <select class="form-select" id="userFeedback" name="feedback" required onchange="toggleActualOutcome()">
+                        <select class="form-select" id="userFeedback" name="feedback" required>
                             <option value="">Select feedback...</option>
-                            <option value="correct">✓ Correct - Prediction matches reality</option>
-                            <option value="incorrect">✗ Incorrect - Prediction is wrong</option>
-                            <option value="uncertain">? Uncertain - Not sure about outcome</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3" id="actualOutcomeSection" style="display: none;">
-                        <label for="actualOutcome" class="form-label">What was the actual outcome?</label>
-                        <select class="form-select" id="actualOutcome" name="actual_outcome">
-                            <option value="">Unknown</option>
-                            <option value="0">Normal Transaction</option>
-                            <option value="1">Fraud Transaction</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="feedbackReason" class="form-label">Reason (Optional)</label>
-                        <textarea class="form-control" id="feedbackReason" name="reason" rows="3" placeholder="Why do you think this prediction is correct/incorrect?"></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="confidenceRating" class="form-label">Your Confidence (1-5)</label>
-                        <select class="form-select" id="confidenceRating" name="confidence_rating">
-                            <option value="1">1 - Very Uncertain</option>
-                            <option value="2">2 - Uncertain</option>
-                            <option value="3" selected>3 - Neutral</option>
-                            <option value="4">4 - Confident</option>
-                            <option value="5">5 - Very Confident</option>
+                            <option value="correct">Correct - Prediction is accurate</option>
+                            <option value="incorrect">Incorrect - Prediction is wrong</option>
                         </select>
                     </div>
                 </form>
@@ -396,9 +383,12 @@ function showPredictionDetails(transactionId) {
     });
 }
 
-function provideFeedback(transactionId, predictedClass) {
-    // Get prediction ID for this transaction
-    fetch(`/api/transaction/${transactionId}/prediction`)
+function provideFeedback(transactionId, predictedClass, predictionId) {
+    // Since prediction ID now matches transaction ID, use transaction ID as prediction ID
+    const actualPredictionId = predictionId || transactionId;
+    
+    // Get transaction details for display
+    fetch(`/api/transaction/${transactionId}/details`)
     .then(response => response.json())
     .then(result => {
         if (result.error) {
@@ -406,15 +396,28 @@ function provideFeedback(transactionId, predictedClass) {
             return;
         }
         
+        // Get the most recent prediction for confidence
+        let confidence = 0.5; // default
+        if (result.predictions && result.predictions.length > 0) {
+            // Find the prediction that matches our transaction ID
+            const matchingPrediction = result.predictions.find(p => p.id === transactionId);
+            if (matchingPrediction) {
+                confidence = matchingPrediction.confidence_score || matchingPrediction.confidence || 0.5;
+            } else {
+                // Use the most recent prediction as fallback
+                confidence = result.predictions[0].confidence_score || result.predictions[0].confidence || 0.5;
+            }
+        }
+        
         // Populate feedback modal
-        document.getElementById('feedbackPredictionId').value = result.prediction_id;
+        document.getElementById('feedbackPredictionId').value = actualPredictionId;
         document.getElementById('feedbackTransactionId').value = transactionId;
         
         document.getElementById('transactionDetails').innerHTML = `
             <strong>Transaction ID:</strong> ${transactionId}<br>
-            <strong>Amount:</strong> $${result.amount}<br>
+            <strong>Amount:</strong> $${parseFloat(result.amount).toFixed(2)}<br>
             <strong>Predicted:</strong> ${predictedClass === 1 ? 'Fraud' : 'Normal'}<br>
-            <strong>Confidence:</strong> ${(result.confidence * 100).toFixed(1)}%
+            <strong>Confidence:</strong> ${(confidence * 100).toFixed(1)}%
         `;
         
         // Show modal
@@ -423,37 +426,26 @@ function provideFeedback(transactionId, predictedClass) {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error loading prediction details');
+        alert('Error loading transaction details');
     });
-}
-
-function toggleActualOutcome() {
-    const feedback = document.getElementById('userFeedback').value;
-    const outcomeSection = document.getElementById('actualOutcomeSection');
-    
-    if (feedback === 'incorrect') {
-        outcomeSection.style.display = 'block';
-    } else {
-        outcomeSection.style.display = 'none';
-        document.getElementById('actualOutcome').value = '';
-    }
 }
 
 function submitFeedback() {
     const form = document.getElementById('feedbackForm');
     const formData = new FormData(form);
     
+    // Validate form data
+    const feedback = formData.get('feedback');
+    if (!feedback) {
+        alert('Please select whether the prediction is correct or incorrect.');
+        return;
+    }
+    
     const data = {
         prediction_id: parseInt(formData.get('prediction_id')),
-        feedback: formData.get('feedback'),
-        reason: formData.get('reason'),
-        confidence_rating: parseInt(formData.get('confidence_rating')),
+        feedback: feedback,
         user_id: 'web_user' // In a real system, this would be the logged-in user
     };
-    
-    if (formData.get('actual_outcome')) {
-        data.actual_outcome = parseInt(formData.get('actual_outcome'));
-    }
     
     const button = event.target;
     const originalText = button.innerHTML;
@@ -470,16 +462,38 @@ function submitFeedback() {
     .then(response => response.json())
     .then(result => {
         if (result.error) {
-            alert('Error: ' + result.error);
+            // Show detailed error message with guidance
+            let errorMessage = result.error;
+            if (result.suggestion) {
+                errorMessage += '\n\n' + result.suggestion;
+            }
+            alert('Error: ' + errorMessage);
+            
+            // If the error is about predictions not being found, offer to generate them
+            if (result.error.includes('not found') && result.error.includes('Generate Predictions')) {
+                if (confirm('Would you like to generate predictions now?')) {
+                    bootstrap.Modal.getInstance(document.getElementById('feedbackModal')).hide();
+                    generateBatchPredictions();
+                }
+            }
         } else {
-            alert('Feedback submitted successfully!');
+            // Show success message and close modal without page reload
+            alert(result.message || 'Feedback submitted successfully! Thank you for helping improve our model.');
             bootstrap.Modal.getInstance(document.getElementById('feedbackModal')).hide();
-            location.reload(); // Refresh to show updated data
+            
+            // Update the UI to show feedback was submitted (optional)
+            const tableRow = document.querySelector(`tr[data-prediction-id="${data.prediction_id}"]`);
+            if (tableRow) {
+                const feedbackCell = tableRow.querySelector('.feedback-status');
+                if (feedbackCell) {
+                    feedbackCell.innerHTML = `<span class="badge bg-info">Feedback: ${feedback}</span>`;
+                }
+            }
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error submitting feedback');
+        alert('Error submitting feedback. Please check your connection and try again.');
     })
     .finally(() => {
         button.innerHTML = originalText;

@@ -25,6 +25,15 @@ class KafkaConfig:
             'feedback': 'fraud-detection-feedback'
         }
         
+    def get_compression_type(self) -> str:
+        """Determine the best available compression type"""
+        try:
+            import lz4
+            return 'lz4'  # Fastest compression
+        except ImportError:
+            logger.warning("LZ4 compression not available, falling back to gzip")
+            return 'gzip'  # Fallback to built-in compression
+        
     def get_producer_config(self) -> Dict[str, Any]:
         """Get Kafka producer configuration optimized for high throughput"""
         return {
@@ -36,7 +45,7 @@ class KafkaConfig:
             'batch_size': 32768,  # Increased from 16384 for better batching
             'linger_ms': 5,  # Increased from 1ms to allow more batching
             'buffer_memory': 67108864,  # Increased to 64MB from 32MB
-            'compression_type': 'lz4',  # Changed from gzip to lz4 for faster compression
+            'compression_type': self.get_compression_type(),  # Auto-detect best compression
             'max_in_flight_requests_per_connection': 5,  # Increased from 1 for better throughput
             'enable_idempotence': False,  # Disabled for better performance
             'request_timeout_ms': 30000,

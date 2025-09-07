@@ -22,11 +22,15 @@
                 </div>
                 <div class="card-body text-center">
                     <div class="row">
-                        <div class="col-6">
-                            <h4><i class="fas fa-database me-2"></i>Transactions Available</h4>
+                        <div class="col-4">
+                            <h4><i class="fas fa-database me-2"></i>Total Transactions</h4>
                             <h2><span class="badge bg-primary fs-4">{{ transaction_count }}</span></h2>
                         </div>
-                        <div class="col-6">
+                        <div class="col-4">
+                            <h4><i class="fas fa-tags me-2"></i>Labeled for Training</h4>
+                            <h2><span class="badge bg-info fs-4">{{ labeled_transaction_count }}</span></h2>
+                        </div>
+                        <div class="col-4">
                             <h4><i class="fas fa-robot me-2"></i>Models Status</h4>
                             {% if model_trained %}
                                 <h2><span class="badge bg-success fs-4">Trained</span></h2>
@@ -44,6 +48,24 @@
             </div>
         </div>
     </div>
+
+    <!-- Warning for no labeled data -->
+    {% if labeled_transaction_count == 0 %}
+    <div class="row mb-4">
+        <div class="col-md-8 mx-auto">
+            <div class="alert alert-warning" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>No labeled data available!</strong> 
+                You need to upload a CSV file with a "Class" column to train the models. 
+                Without labeled data, the models cannot learn to detect fraud patterns.
+                <br>
+                <a href="{{ url_for('upload_data') }}" class="btn btn-warning mt-2">
+                    <i class="fas fa-upload me-1"></i>Upload Training Data
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Simple Training Form -->
     <div class="row">

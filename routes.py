@@ -21,7 +21,9 @@ def index():
         # Get basic statistics
         total_transactions = Transaction.query.count()
         fraud_transactions = Transaction.query.filter_by(actual_class=1).count()
-        normal_transactions = total_transactions - fraud_transactions
+        labeled_transactions = Transaction.query.filter(Transaction.actual_class.isnot(None)).count()
+        unlabeled_transactions = total_transactions - labeled_transactions
+        normal_transactions = Transaction.query.filter_by(actual_class=0).count()
         
         # Get recent performance metrics
         latest_performance = ModelPerformance.query.order_by(ModelPerformance.evaluation_date.desc()).first()
@@ -39,11 +41,13 @@ def index():
         # Get active fraud alerts
         active_alerts = FraudAlert.query.filter_by(acknowledged=False).order_by(FraudAlert.created_at.desc()).limit(10).all()
         
-        # Calculate fraud rate
-        fraud_rate = (fraud_transactions / total_transactions * 100) if total_transactions > 0 else 0
+        # Calculate fraud rate (only for labeled transactions)
+        fraud_rate = (fraud_transactions / labeled_transactions * 100) if labeled_transactions > 0 else 0
         
         stats = {
             'total_transactions': total_transactions,
+            'labeled_transactions': labeled_transactions,
+            'unlabeled_transactions': unlabeled_transactions,
             'fraud_transactions': fraud_transactions,
             'normal_transactions': normal_transactions,
             'fraud_rate': fraud_rate,
@@ -144,10 +148,12 @@ def train_models():
     """Simplified training interface with just transaction count selection"""
     if request.method == 'GET':
         transaction_count = Transaction.query.count()
+        labeled_transaction_count = Transaction.query.filter(Transaction.actual_class.isnot(None)).count()
         latest_performance = ModelPerformance.query.order_by(ModelPerformance.evaluation_date.desc()).first()
         
         return render_template('train.html', 
                              transaction_count=transaction_count,
+                             labeled_transaction_count=labeled_transaction_count,
                              model_trained=ml_models.is_trained,
                              latest_performance=latest_performance)
     
@@ -179,10 +185,16 @@ def train_models():
                 flash(f'Error clearing models: {str(e)}', 'danger')
                 return redirect(url_for('train_models'))
         
-        # Check if we have data
+        # Check if we have data with ground truth for training
         total_transactions = Transaction.query.count()
+        labeled_transactions = Transaction.query.filter(Transaction.actual_class.isnot(None)).count()
+        
         if total_transactions == 0:
             flash('No transaction data available. Please upload data first.', 'warning')
+            return redirect(url_for('upload_data'))
+        
+        if labeled_transactions == 0:
+            flash('No labeled transaction data available for training. Please upload data with Class column.', 'warning')
             return redirect(url_for('upload_data'))
         
         # Get transaction limit from form
@@ -218,15 +230,16 @@ def train_models():
             ml_models.update_parameters(advanced_params)
             logging.info(f"Updated model parameters: {advanced_params}")
         
-        # Prepare training data with limit
+        # Prepare training data with limit (only labeled transactions)
         if transaction_limit == 'all':
-            # Use all transactions
-            X_train, X_test, y_train, y_test = data_processor.prepare_training_data()
+            # Use all labeled transactions
+            labeled_transactions = Transaction.query.filter(Transaction.actual_class.isnot(None)).all()
+            X_train, X_test, y_train, y_test = data_processor.prepare_training_data(transactions=labeled_transactions)
         else:
-            # Use limited number of transactions
+            # Use limited number of labeled transactions
             limit = int(transaction_limit)
-            # Get limited transactions (most recent ones)
-            limited_transactions = Transaction.query.order_by(Transaction.id.desc()).limit(limit).all()
+            # Get limited labeled transactions (most recent ones)
+            limited_transactions = Transaction.query.filter(Transaction.actual_class.isnot(None)).order_by(Transaction.id.desc()).limit(limit).all()
             X_train, X_test, y_train, y_test = data_processor.prepare_training_data(transactions=limited_transactions)
         
         if X_train is None:
@@ -306,7 +319,7 @@ def run_predictions():
                 return redirect(url_for('train_models'))
         
         # Get transactions without predictions
-        transactions = Transaction.query.outerjoin(Prediction).filter(Prediction.id.is_(None)).limit(100).all()
+        transactions = Transaction.query.outerjoin(Prediction).filter(Prediction.transaction_id.is_(None)).limit(100).all()
         
         if not transactions:
             flash('No new transactions to predict', 'info')
@@ -486,8 +499,12 @@ def view_transactions():
         query = Transaction.query
         
         # Apply filters
-        if class_filter in ['0', '1']:
-            query = query.filter(Transaction.actual_class == int(class_filter))
+        if class_filter == '0':
+            query = query.filter(Transaction.actual_class == 0)
+        elif class_filter == '1':
+            query = query.filter(Transaction.actual_class == 1)
+        elif class_filter == 'unlabeled':
+            query = query.filter(Transaction.actual_class.is_(None))
         
         if min_amount is not None:
             query = query.filter(Transaction.amount >= min_amount)
@@ -502,6 +519,7 @@ def view_transactions():
         total_count = Transaction.query.count()
         normal_count = Transaction.query.filter_by(actual_class=0).count()
         fraud_count = Transaction.query.filter_by(actual_class=1).count()
+        unlabeled_count = Transaction.query.filter(Transaction.actual_class.is_(None)).count()
         
         # Average amount
         avg_amount_result = db.session.query(db.func.avg(Transaction.amount)).scalar()
@@ -512,6 +530,7 @@ def view_transactions():
                              total_count=total_count,
                              normal_count=normal_count,
                              fraud_count=fraud_count,
+                             unlabeled_count=unlabeled_count,
                              avg_amount=avg_amount,
                              limit=limit)
         
@@ -724,7 +743,7 @@ def api_predict_manual():
         transaction = Transaction()
         transaction.time_feature = float(data["time_feature"])
         transaction.amount = float(data["amount"])
-        transaction.actual_class = -1  # Mark as manual prediction (unknown ground truth)
+        transaction.actual_class = None  # Mark as manual prediction (unknown ground truth)
         
         # Set all V features
         for i in range(1, 29):
@@ -874,6 +893,7 @@ def prediction_validation():
             y_scores.append(pred.ensemble_prediction)
             
             validation_details.append({
+                'prediction_id': pred.transaction_id,
                 'transaction_id': txn.id,
                 'actual_class': txn.actual_class,
                 'predicted_class': pred.final_prediction,
@@ -967,27 +987,24 @@ def api_validate_prediction():
 
 @app.route("/api/feedback", methods=["POST"])
 def api_submit_feedback():
-    """Submit user feedback on a prediction"""
+    """Submit user feedback on a prediction (simplified: correct or incorrect only)"""
     try:
         data = request.json
         prediction_id = data.get('prediction_id')
-        feedback = data.get('feedback')  # 'correct', 'incorrect', 'uncertain'
-        reason = data.get('reason', '')
-        confidence_rating = data.get('confidence_rating', 3)
-        actual_outcome = data.get('actual_outcome')  # 0 or 1 if known
+        feedback = data.get('feedback')  # 'correct' or 'incorrect'
         user_id = data.get('user_id', 'anonymous')
         
         # Validate input
-        if not prediction_id or feedback not in ['correct', 'incorrect', 'uncertain']:
-            return jsonify({"error": "Missing or invalid prediction_id or feedback"}), 400
-        
-        if confidence_rating not in range(1, 6):
-            confidence_rating = 3  # Default to neutral
+        if not prediction_id or feedback not in ['correct', 'incorrect']:
+            return jsonify({"error": "Missing or invalid prediction_id or feedback. Use 'correct' or 'incorrect'"}), 400
         
         # Check if prediction exists
         prediction = Prediction.query.get(prediction_id)
         if not prediction:
-            return jsonify({"error": "Prediction not found"}), 404
+            return jsonify({
+                "error": f"Prediction {prediction_id} not found. Please generate predictions first using the 'Generate Predictions' button before submitting feedback.",
+                "suggestion": "Click 'Generate Predictions' to create predictions for transactions, then try submitting feedback again."
+            }), 404
         
         # Check if feedback already exists
         existing_feedback = PredictionFeedback.query.filter_by(
@@ -996,29 +1013,26 @@ def api_submit_feedback():
         ).first()
         
         if existing_feedback:
-            return jsonify({"error": "Feedback already provided by this user"}), 409
+            return jsonify({"error": "Feedback already provided by this user for this prediction"}), 409
         
-        # Save feedback using ML models method
+        # Save feedback using ML models method (simplified)
         feedback_data = {
             'feedback': feedback,
-            'reason': reason,
-            'confidence_rating': confidence_rating,
-            'actual_outcome': actual_outcome,
             'user_id': user_id
         }
         
         if ml_models.save_prediction_feedback(prediction_id, feedback_data):
             return jsonify({
-                "message": "Feedback submitted successfully",
+                "message": "Feedback submitted successfully! Thank you for helping improve our fraud detection model.",
                 "prediction_id": prediction_id,
                 "feedback": feedback
             })
         else:
-            return jsonify({"error": "Failed to save feedback"}), 500
+            return jsonify({"error": "Failed to save feedback. Please try again."}), 500
             
     except Exception as e:
         logging.error(f"Error submitting feedback: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"An error occurred while submitting feedback: {str(e)}"}), 500
 
 
 @app.route("/api/feedback/<int:prediction_id>", methods=["GET"])
@@ -1032,8 +1046,6 @@ def api_get_feedback(prediction_id):
             feedback_data.append({
                 'id': feedback.id,
                 'feedback': feedback.user_feedback,
-                'reason': feedback.feedback_reason,
-                'confidence_rating': feedback.confidence_rating,
                 'actual_outcome': feedback.actual_outcome,
                 'created_at': feedback.created_at.isoformat(),
                 'created_by': feedback.created_by
@@ -1061,7 +1073,7 @@ def feedback_dashboard():
         recent_feedback = db.session.query(
             PredictionFeedback, Prediction, Transaction
         ).join(
-            Prediction, PredictionFeedback.prediction_id == Prediction.id
+            Prediction, PredictionFeedback.prediction_id == Prediction.transaction_id
         ).join(
             Transaction, PredictionFeedback.transaction_id == Transaction.id
         ).order_by(
@@ -1073,20 +1085,30 @@ def feedback_dashboard():
         
         # Format recent feedback for display
         formatted_feedback = []
-        for feedback, prediction, transaction in recent_feedback:
-            formatted_feedback.append({
-                'id': feedback.id,
-                'prediction_id': prediction.id,
-                'transaction_id': transaction.id,
-                'user_feedback': feedback.user_feedback,
-                'predicted_class': prediction.final_prediction,
-                'actual_class': transaction.actual_class,
-                'confidence': prediction.confidence_score,
-                'amount': transaction.amount,
-                'feedback_reason': feedback.feedback_reason,
-                'created_at': feedback.created_at,
-                'created_by': feedback.created_by
-            })
+        for row in recent_feedback:
+            try:
+                if len(row) == 3:
+                    feedback, prediction, transaction = row
+                else:
+                    logging.warning(f"Unexpected feedback row length: {len(row)}, expected 3")
+                    continue
+                    
+                formatted_feedback.append({
+                    'id': feedback.id,
+                    'prediction_id': prediction.transaction_id,
+                    'transaction_id': transaction.id,
+                    'user_feedback': feedback.user_feedback,
+                    'predicted_class': prediction.final_prediction,
+                    'actual_class': transaction.actual_class if hasattr(transaction, 'actual_class') else feedback.actual_outcome,
+                    'confidence': prediction.confidence_score,
+                    'amount': transaction.amount,
+                    'feedback_reason': feedback.feedback_reason,
+                    'created_at': feedback.created_at,
+                    'created_by': feedback.created_by
+                })
+            except Exception as row_error:
+                logging.error(f"Error processing feedback row: {str(row_error)}")
+                continue
         
         return render_template('feedback.html',
                              feedback_stats=feedback_stats,
@@ -1153,7 +1175,7 @@ def api_get_transaction_prediction(transaction_id):
             return jsonify({"error": "Transaction not found"}), 404
         
         return jsonify({
-            "prediction_id": prediction.id,
+            "prediction_id": prediction.transaction_id,
             "transaction_id": transaction_id,
             "amount": transaction.amount,
             "predicted_class": prediction.final_prediction,

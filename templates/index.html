@@ -28,6 +28,16 @@
         </div>
         
         <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-info">
+                <div class="card-body text-center">
+                    <i class="fas fa-tags fa-2x mb-3"></i>
+                    <h3 class="card-title">{{ stats.labeled_transactions or 0 }}</h3>
+                    <p class="card-text">Labeled for Training</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
             <div class="card bg-danger">
                 <div class="card-body text-center">
                     <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
@@ -38,6 +48,19 @@
         </div>
         
         <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-warning">
+                <div class="card-body text-center">
+                    <i class="fas fa-percentage fa-2x mb-3"></i>
+                    <h3 class="card-title">{{ "%.2f"|format(stats.fraud_rate or 0) }}%</h3>
+                    <p class="card-text">Fraud Rate</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Additional Statistics Row -->
+    <div class="row mb-4">
+        <div class="col-lg-4 col-md-6 mb-3">
             <div class="card bg-success">
                 <div class="card-body text-center">
                     <i class="fas fa-check-circle fa-2x mb-3"></i>
@@ -47,12 +70,22 @@
             </div>
         </div>
         
-        <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card bg-warning">
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card bg-secondary">
                 <div class="card-body text-center">
-                    <i class="fas fa-percentage fa-2x mb-3"></i>
-                    <h3 class="card-title">{{ "%.2f"|format(stats.fraud_rate or 0) }}%</h3>
-                    <p class="card-text">Fraud Rate</p>
+                    <i class="fas fa-question-circle fa-2x mb-3"></i>
+                    <h3 class="card-title">{{ stats.unlabeled_transactions or 0 }}</h3>
+                    <p class="card-text">Unlabeled Transactions</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 col-md-6 mb-3">
+            <div class="card bg-dark">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-line fa-2x mb-3"></i>
+                    <h3 class="card-title">{{ stats.total_predictions or 0 }}</h3>
+                    <p class="card-text">Total Predictions</p>
                 </div>
             </div>
         </div>

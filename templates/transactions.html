@@ -35,6 +35,7 @@
                             <option value="">All Transactions</option>
                             <option value="0" {% if request.args.get('class_filter') == '0' %}selected{% endif %}>Normal</option>
                             <option value="1" {% if request.args.get('class_filter') == '1' %}selected{% endif %}>Fraud</option>
+                            <option value="unlabeled" {% if request.args.get('class_filter') == 'unlabeled' %}selected{% endif %}>Unlabeled</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -98,6 +99,18 @@
             </div>
         </div>
         <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <h4>{{ unlabeled_count }}</h4>
+                    <small>Unlabeled Transactions</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Average Amount -->
+    <div class="row mb-4">
+        <div class="col-md-3">
             <div class="card bg-info text-white">
                 <div class="card-body text-center">
                     <h4>${{ avg_amount }}</h4>
@@ -141,8 +154,10 @@
                             <td>
                                 {% if txn.actual_class == 1 %}
                                     <span class="badge bg-danger">Fraud</span>
-                                {% else %}
+                                {% elif txn.actual_class == 0 %}
                                     <span class="badge bg-success">Normal</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Unlabeled</span>
                                 {% endif %}
                             </td>
                             <td>

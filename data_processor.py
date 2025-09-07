@@ -24,12 +24,17 @@ class DataProcessor:
             logging.info(f"Loaded CSV with shape: {df.shape}")
             
             # Validate required columns
-            required_cols = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount', 'Class']
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            required_cols = ['Time'] + [f'V{i}' for i in range(1, 29)] + ['Amount']
+            optional_cols = ['Class']  # Class column is now optional
+            missing_required = [col for col in required_cols if col not in df.columns]
             
-            if missing_cols:
-                logging.error(f"Missing required columns: {missing_cols}")
+            if missing_required:
+                logging.error(f"Missing required columns: {missing_required}")
                 return None
+            
+            # Check if Class column exists
+            has_class_column = 'Class' in df.columns
+            logging.info(f"CSV has Class column: {has_class_column}")
                 
             return df
             
@@ -44,18 +49,31 @@ class DataProcessor:
             processed_df = df.copy()
             
             # Rename columns to match our model
-            column_mapping = {'Time': 'time_feature', 'Amount': 'amount', 'Class': 'actual_class'}
+            column_mapping = {'Time': 'time_feature', 'Amount': 'amount'}
             for i in range(1, 29):
                 column_mapping[f'V{i}'] = f'v{i}'
+            
+            # Handle Class column if it exists
+            has_class_column = 'Class' in processed_df.columns
+            if has_class_column:
+                column_mapping['Class'] = 'actual_class'
                 
             processed_df = processed_df.rename(columns=column_mapping)
+            
+            # Add actual_class column if it doesn't exist (set to None for unknown)
+            if not has_class_column:
+                processed_df['actual_class'] = None
+                logging.info("No Class column found - setting actual_class to None for all transactions")
             
             # Handle any missing values
             processed_df = processed_df.fillna(0)
             
-            # Log class distribution
-            class_counts = processed_df['actual_class'].value_counts()
-            logging.info(f"Class distribution: Normal={class_counts.get(0, 0)}, Fraud={class_counts.get(1, 0)}")
+            # Log class distribution if we have ground truth
+            if has_class_column and 'actual_class' in processed_df.columns:
+                class_counts = processed_df['actual_class'].value_counts()
+                logging.info(f"Class distribution: Normal={class_counts.get(0, 0)}, Fraud={class_counts.get(1, 0)}")
+            else:
+                logging.info(f"No ground truth labels - processed {len(processed_df)} transactions for prediction only")
             
             return processed_df
             
@@ -105,7 +123,13 @@ class DataProcessor:
                 transaction.v27 = float(row['v27'])
                 transaction.v28 = float(row['v28'])
                 transaction.amount = float(row['amount'])
-                transaction.actual_class = int(row['actual_class'])
+                
+                # Handle optional actual_class
+                if pd.notna(row['actual_class']):
+                    transaction.actual_class = int(row['actual_class'])
+                else:
+                    transaction.actual_class = None  # Unknown ground truth
+                    
                 transactions.append(transaction)
             
             # Bulk insert
@@ -120,7 +144,7 @@ class DataProcessor:
             db.session.rollback()
             return False
     
-    def get_feature_matrix(self, transactions=None):
+    def get_feature_matrix(self, transactions=None, include_labels=True):
         """Extract feature matrix from transactions"""
         try:
             if transactions is None:
@@ -143,10 +167,17 @@ class DataProcessor:
                     txn.amount
                 ]
                 features.append(feature_row)
-                labels.append(txn.actual_class)
+                
+                # Only include label if it exists and we want labels
+                if include_labels and txn.actual_class is not None:
+                    labels.append(txn.actual_class)
+                elif include_labels:
+                    # Skip transactions without ground truth when training
+                    features.pop()  # Remove the feature row we just added
+                    continue
             
             X = np.array(features)
-            y = np.array(labels)
+            y = np.array(labels) if include_labels and labels else None
             
             return X, y
             
@@ -157,9 +188,24 @@ class DataProcessor:
     def prepare_training_data(self, transactions=None):
         """Prepare data for model training"""
         try:
-            X, y = self.get_feature_matrix(transactions)
+            # Only use transactions with ground truth labels for training
+            if transactions is None:
+                transactions = Transaction.query.filter(Transaction.actual_class.isnot(None)).all()
+            else:
+                # Filter to only transactions with ground truth
+                transactions = [t for t in transactions if t.actual_class is not None]
+            
+            if not transactions:
+                logging.error("No transactions with ground truth labels found for training")
+                return None, None, None, None
+            
+            X, y = self.get_feature_matrix(transactions, include_labels=True)
             
             if X is None or y is None:
+                return None, None, None, None
+            
+            if len(X) == 0:
+                logging.error("No valid training data after filtering")
                 return None, None, None, None
             
             # Scale features
@@ -168,13 +214,23 @@ class DataProcessor:
             # Save the fitted scaler
             self.save_scaler()
             
-            # Split data
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_scaled, y, test_size=0.2, random_state=42, stratify=y
-            )
+            # Check if we have both classes for stratified split
+            unique_classes = np.unique(y)
+            if len(unique_classes) < 2:
+                logging.warning(f"Only one class found in training data: {unique_classes}")
+                # Simple split without stratification
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X_scaled, y, test_size=0.2, random_state=42
+                )
+            else:
+                # Stratified split
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X_scaled, y, test_size=0.2, random_state=42, stratify=y
+                )
             
             logging.info(f"Training data shape: {X_train.shape}")
             logging.info(f"Test data shape: {X_test.shape}")
+            logging.info(f"Training with ground truth labels: {len(transactions)} transactions")
             
             return X_train, X_test, y_train, y_test
             
@@ -222,6 +278,7 @@ class DataProcessor:
                     **{f'v{i}': float(row[f'v{i}']) for i in range(1, 29)}
                 }
                 
+                # Only add actual_class if it exists and is not null
                 if 'actual_class' in row and pd.notna(row['actual_class']):
                     transaction_kafka['actual_class'] = int(row['actual_class'])
                 

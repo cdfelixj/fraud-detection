@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+from datetime import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, precision_score, recall_score, f1_score, roc_auc_score, accuracy_score
@@ -577,7 +578,7 @@ class FraudDetectionModels:
                     
                     # Create prediction record
                     prediction = Prediction(
-                        transaction_id=transaction.id,
+                        transaction_id=transaction.id,  # This is now the primary key
                         final_prediction=1 if is_fraud else 0,
                         isolation_forest_score=isolation_score,
                         logistic_regression_score=logistic_score,
@@ -586,7 +587,21 @@ class FraudDetectionModels:
                         confidence_score=confidence,
                         model_version='ensemble_v1.0'
                     )
-                    db.session.add(prediction)
+                    
+                    # Check if prediction already exists with this ID
+                    existing_prediction = Prediction.query.get(transaction.id)
+                    if existing_prediction:
+                        # Update existing prediction instead of creating new one
+                        existing_prediction.final_prediction = 1 if is_fraud else 0
+                        existing_prediction.isolation_forest_score = isolation_score
+                        existing_prediction.logistic_regression_score = logistic_score
+                        existing_prediction.xgboost_score = xgboost_score
+                        existing_prediction.ensemble_prediction = ensemble_score
+                        existing_prediction.confidence_score = confidence
+                        existing_prediction.model_version = 'ensemble_v1.0'
+                        existing_prediction.prediction_time = datetime.utcnow()
+                    else:
+                        db.session.add(prediction)
                     
                     results.append({
                         'transaction_id': transaction.transaction_id or f'txn_{transaction.id}',
@@ -651,6 +666,114 @@ class FraudDetectionModels:
                 'agreement_rate': 0.0
             }
     
+    def save_prediction_feedback(self, prediction_id, feedback_data):
+        """Save user feedback for a prediction (simplified version for model training)"""
+        try:
+            # Import database models when needed
+            db_imports = self._get_db_imports()
+            db, Prediction, Transaction, PredictionFeedback = db_imports[0], db_imports[1], db_imports[2], db_imports[3]
+            
+            # Get prediction and transaction
+            prediction = Prediction.query.get(prediction_id)
+            if not prediction:
+                logging.error(f"Prediction {prediction_id} not found")
+                return False
+            
+            # Debug: Check what type of object we have
+            logging.info(f"Debug: prediction object type: {type(prediction)}")
+            logging.info(f"Debug: prediction has final_prediction: {hasattr(prediction, 'final_prediction')}")
+            
+            # Get the associated transaction
+            transaction = Transaction.query.get(prediction.transaction_id)
+            if not transaction:
+                logging.error(f"Transaction {prediction.transaction_id} not found")
+                return False
+            
+            # Debug: Check what type of object we have
+            logging.info(f"Debug: transaction object type: {type(transaction)}")
+            logging.info(f"Debug: transaction has final_prediction: {hasattr(transaction, 'final_prediction')}")
+            
+            # Map user feedback to actual class for model training
+            # 'correct' means the prediction was right, so keep original actual_class
+            # 'incorrect' means the prediction was wrong, so flip the actual_class
+            user_feedback = feedback_data.get('feedback', 'correct')
+            
+            if user_feedback == 'incorrect':
+                # If user says prediction is incorrect, flip the actual outcome
+                corrected_actual_class = 1 - prediction.final_prediction
+            else:
+                # If user says prediction is correct, use the predicted value as actual
+                corrected_actual_class = prediction.final_prediction
+            
+            # Create feedback record for training data
+            feedback = PredictionFeedback(
+                prediction_id=prediction_id,
+                transaction_id=prediction.transaction_id,
+                user_feedback=user_feedback,  # 'correct' or 'incorrect'
+                actual_outcome=corrected_actual_class,  # Corrected ground truth for training
+                feedback_reason=None,  # No reason field needed
+                created_by=feedback_data.get('user_id', 'user')
+            )
+            
+            # Update the transaction's actual_class for future training
+            # This ensures the corrected label is used when retraining the model
+            transaction.actual_class = corrected_actual_class
+            
+            db.session.add(feedback)
+            db.session.commit()
+            
+            logging.info(f"Feedback saved: prediction_id={prediction_id}, user_feedback={user_feedback}, corrected_class={corrected_actual_class}")
+            return True
+            
+        except Exception as e:
+            # Import database models when needed
+            db = self._get_db_imports()[0]
+            db.session.rollback()
+            logging.error(f"Error saving feedback: {str(e)}")
+            return False
+    
+    def get_feedback_training_data(self):
+        """Get corrected training data from user feedback for model retraining"""
+        try:
+            # Import database models when needed
+            db_imports = self._get_db_imports()
+            db, Transaction, Prediction, PredictionFeedback = db_imports[0], db_imports[2], db_imports[1], db_imports[3]
+            
+            # Get transactions that have feedback corrections
+            corrected_data = db.session.query(
+                Transaction, PredictionFeedback
+            ).join(
+                PredictionFeedback, Transaction.id == PredictionFeedback.transaction_id
+            ).all()
+            
+            if not corrected_data:
+                logging.info("No feedback training data available")
+                return None, None
+            
+            features = []
+            labels = []
+            
+            for transaction, feedback in corrected_data:
+                # Extract features (V1-V28, time_feature, amount)
+                feature_row = [
+                    transaction.time_feature,
+                    transaction.v1, transaction.v2, transaction.v3, transaction.v4, transaction.v5,
+                    transaction.v6, transaction.v7, transaction.v8, transaction.v9, transaction.v10,
+                    transaction.v11, transaction.v12, transaction.v13, transaction.v14, transaction.v15,
+                    transaction.v16, transaction.v17, transaction.v18, transaction.v19, transaction.v20,
+                    transaction.v21, transaction.v22, transaction.v23, transaction.v24, transaction.v25,
+                    transaction.v26, transaction.v27, transaction.v28, transaction.amount
+                ]
+                features.append(feature_row)
+                labels.append(feedback.actual_outcome)  # Use corrected label from feedback
+            
+            logging.info(f"Retrieved {len(features)} corrected training samples from user feedback")
+            return np.array(features), np.array(labels)
+            
+        except Exception as e:
+            logging.error(f"Error getting feedback training data: {str(e)}")
+            return None, None
+    
     def get_problematic_predictions(self, limit=10):
         """Get predictions that have been marked as incorrect for review"""
         try:
@@ -663,7 +786,7 @@ class FraudDetectionModels:
             ).join(
                 Transaction, Prediction.transaction_id == Transaction.id
             ).join(
-                PredictionFeedback, Prediction.id == PredictionFeedback.prediction_id
+                PredictionFeedback, Prediction.transaction_id == PredictionFeedback.prediction_id
             ).filter(
                 PredictionFeedback.user_feedback == 'incorrect'
             ).order_by(
@@ -671,19 +794,30 @@ class FraudDetectionModels:
             ).limit(limit).all()
             
             result = []
-            for prediction, transaction, feedback in problematic:
-                result.append({
-                    'prediction_id': prediction.id,
-                    'transaction_id': transaction.id,
-                    'amount': float(transaction.amount),
-                    'predicted_fraud': prediction.final_prediction,
-                    'isolation_score': prediction.isolation_forest_score,
-                    'logistic_score': prediction.logistic_regression_score,
-                    'xgboost_score': prediction.xgboost_score,
-                    'ensemble_score': prediction.ensemble_prediction,
-                    'feedback_date': feedback.created_at.isoformat(),
-                    'feedback_comment': feedback.comment
-                })
+            for row in problematic:
+                try:
+                    # Handle the unpacking more safely
+                    if len(row) == 3:
+                        prediction, transaction, feedback = row
+                    else:
+                        logging.warning(f"Unexpected row length: {len(row)}, expected 3")
+                        continue
+                        
+                    result.append({
+                        'prediction_id': prediction.transaction_id,
+                        'transaction_id': transaction.id,
+                        'amount': float(transaction.amount),
+                        'predicted_fraud': prediction.final_prediction,
+                        'isolation_score': prediction.isolation_forest_score,
+                        'logistic_score': prediction.logistic_regression_score,
+                        'xgboost_score': prediction.xgboost_score,
+                        'ensemble_score': prediction.ensemble_prediction,
+                        'feedback_date': feedback.created_at.isoformat(),
+                        'feedback_comment': feedback.feedback_reason if feedback.feedback_reason else ''
+                    })
+                except Exception as row_error:
+                    logging.error(f"Error processing problematic prediction row: {str(row_error)}")
+                    continue
             
             return result
             

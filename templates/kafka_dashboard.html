@@ -7,68 +7,91 @@
     <div class="row">
         <div class="col-md-12">
             <h2>Streaming Dashboard</h2>
-            <p class="text-muted">Real-time fraud detection with streaming data processing</p>
+            <p class="text-m    if (simulationActive) {
+        // Stop simulation
+        clearInterval(streamingInterval);
+        simulationActive = false;
+        toggleBtn.className = 'btn btn-success';
+        toggleText.textContent = 'Start Stream';
+    } else {
+        // Start simulation
+        simulationActive = true;
+        toggleBtn.className = 'btn btn-danger';
+        toggleText.textContent = 'Stop Stream';
+        
+        streamingInterval = setInterval(() => {
+            updateSimulationData();
+        }, 1000);
+    }fraud detection with streaming data processing</p>
         </div>
     </div>
     
     <!-- System Status Row -->
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-info">
                 <div class="card-body text-center">
                     <h5 class="card-title">Kafka Status</h5>
                     <div id="kafka-status" class="h3">
                         <span class="badge badge-secondary">Checking...</span>
                     </div>
-                    <small class="text-muted">Connection Status</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-success">
                 <div class="card-body text-center">
                     <h5 class="card-title">Processing Rate</h5>
                     <div id="processing-rate" class="h3">
                         <span class="text-primary">0 TPS</span>
                     </div>
-                    <small class="text-muted">Transactions Per Second</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-warning">
                 <div class="card-body text-center">
                     <h5 class="card-title">Live Alerts</h5>
                     <div id="live-alerts" class="h3">
                         <span class="text-danger">0</span>
                     </div>
-                    <small class="text-muted">Last Hour</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Processed</h5>
+                    <div id="live-total-transactions" class="h3">
+                        <span class="text-primary">0</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Stream Control Row -->
+    <!-- Stream Control -->
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h5>Stream Configuration</h5>
+                    <h5>Stream Control</h5>
                 </div>
                 <div class="card-body">
-                    <form id="stream-control-form">
-                        <div class="form-group">
-                            <label>Simulation Rate (TPS)</label>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label>Rate (TPS)</label>
                             <input type="number" class="form-control" id="tps-input" value="10" min="1" max="1000">
-                            <small class="form-text text-muted">Transactions per second to simulate</small>
                         </div>
-                        <div class="form-group">
+                        <div class="col-md-6">
                             <label>Fraud Rate (%)</label>
                             <input type="number" class="form-control" id="fraud-rate-input" value="2" min="0" max="50" step="0.1">
-                            <small class="form-text text-muted">Percentage of fraudulent transactions</small>
                         </div>
-                        <button type="button" class="btn btn-primary" onclick="updateStreamConfig()">Update Configuration</button>
-                    </form>
+                    </div>
+                    <button type="button" class="btn btn-success" id="simulation-toggle" onclick="toggleStreamingSimulation()">
+                        <span id="simulation-toggle-text">Start Stream</span>
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="updateStreamConfig()">Update Config</button>
                 </div>
             </div>
         </div>
@@ -76,338 +99,37 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h5>Database Streaming Control</h5>
+                    <h5>Quick Actions</h5>
                 </div>
                 <div class="card-body">
-                    <div class="mb-3">
-                        <h6>Database Statistics</h6>
-                        <div id="database-stats">
-                            <div class="row">
-                                <div class="col-6">
-                                    <small class="text-muted">Total Records:</small>
-                                    <div id="db-total-records" class="font-weight-bold">Loading...</div>
-                                </div>
-                                <div class="col-6">
-                                    <small class="text-muted">Fraud Rate:</small>
-                                    <div id="db-fraud-rate" class="font-weight-bold">Loading...</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <h6>Streaming Configuration</h6>
-                        <form id="db-stream-form">
-                            <div class="form-group">
-                                <label>Records Limit (optional)</label>
-                                <input type="number" class="form-control" id="stream-limit" placeholder="Leave empty for all records" min="1">
-                                <small class="form-text text-muted">Maximum number of records to stream</small>
-                            </div>
-                            <div class="form-group">
-                                <label>Start Offset</label>
-                                <input type="number" class="form-control" id="stream-offset" value="0" min="0">
-                                <small class="form-text text-muted">Skip this many records from the beginning</small>
-                            </div>
-                        </form>
-                    </div>
-                    
-                    <div class="streaming-controls">
-                        <div id="streaming-status" class="mb-3">
-                            <span class="badge badge-secondary">Not Streaming</span>
-                        </div>
-                        
-                        <button type="button" class="btn btn-success" id="start-db-stream-btn" onclick="startDatabaseStream()">
-                            Start Database Streaming
-                        </button>
-                        <button type="button" class="btn btn-danger" id="stop-db-stream-btn" onclick="stopDatabaseStream()" disabled>
-                            Stop Streaming
-                        </button>
-                        <button type="button" class="btn btn-info" onclick="refreshDatabaseStats()">
-                            Refresh Stats
-                        </button>
-                    </div>
+                    <button type="button" class="btn btn-success btn-sm" onclick="sendTestTransaction()">Test Transaction</button>
+                    <button type="button" class="btn btn-warning btn-sm" onclick="sendFraudTransaction()">Test Fraud</button>
+                    <button type="button" class="btn btn-info btn-sm" onclick="enableBurstMode()">Burst Mode</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="refreshDatabaseStats()">Refresh</button>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Data Source Selection Row -->
+    <!-- Essential Charts -->
     <div class="row mb-4">
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h5>Stream Configuration</h5>
+                    <h6><i class="fas fa-chart-line me-2"></i>Transaction Flow</h6>
                 </div>
                 <div class="card-body">
-                    <form id="stream-control-form">
-                        <div class="form-group">
-                            <label>Simulation Rate (TPS)</label>
-                            <input type="number" class="form-control" id="tps-input" value="10" min="1" max="1000">
-                            <small class="form-text text-muted">Transactions per second to simulate</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Fraud Rate (%)</label>
-                            <input type="number" class="form-control" id="fraud-rate-input" value="2" min="0" max="50" step="0.1">
-                            <small class="form-text text-muted">Percentage of fraudulent transactions</small>
-                        </div>
-                        <button type="button" class="btn btn-primary" onclick="updateStreamConfig()">Update Configuration</button>
-                    </form>
+                    <canvas id="transactionFlowChart" height="200"></canvas>
                 </div>
             </div>
         </div>
-        
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h5>Real-time Transaction Input</h5>
+                    <h6><i class="fas fa-chart-bar me-2"></i>Fraud Detection Rate</h6>
                 </div>
                 <div class="card-body">
-                    <button type="button" class="btn btn-success" onclick="sendTestTransaction()">Send Test Transaction</button>
-                    <button type="button" class="btn btn-warning" onclick="sendFraudTransaction()">Send Fraud Test</button>
-                    <button type="button" class="btn btn-info" onclick="enableBurstMode()">Enable Burst Mode</button>
-                    
-                    <div class="mt-3">
-                        <p class="text-muted">
-                            <i class="fas fa-info-circle me-2"></i>
-                            For CSV file uploads, use the <a href="/upload" class="text-decoration-none">Upload Data</a> page which offers both direct database and Kafka streaming options.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Real-time Streaming Simulation Dashboard -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-chart-line me-2"></i>Live Streaming Simulation</h5>
-                    <div class="float-right">
-                        <button class="btn btn-sm btn-success" id="simulation-toggle" onclick="toggleStreamingSimulation()">
-                            <span id="simulation-toggle-text">Start Simulation</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- Live Statistics Row -->
-                    <div class="row mb-4">
-                        <div class="col-md-3">
-                            <div class="text-center p-3 border rounded">
-                                <h4 id="live-total-transactions" class="text-primary mb-0">0</h4>
-                                <small class="text-muted">Transactions Processed</small>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="text-center p-3 border rounded">
-                                <h4 id="live-fraud-detected" class="text-danger mb-0">0</h4>
-                                <small class="text-muted">Fraud Detected</small>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="text-center p-3 border rounded">
-                                <h4 id="live-avg-amount" class="text-success mb-0">$0.00</h4>
-                                <small class="text-muted">Avg Amount</small>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="text-center p-3 border rounded">
-                                <h4 id="live-current-tps" class="text-info mb-0">0</h4>
-                                <small class="text-muted">Current TPS</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Charts Row - Following Dashboard Format -->
-                    <div class="row mb-4">
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="card-title mb-0">
-                                        <i class="fas fa-chart-line me-2"></i>
-                                        Transaction Flow (Last 60 seconds)
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="transactionFlowChart" width="400" height="200"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="card-title mb-0">
-                                        <i class="fas fa-chart-bar me-2"></i>
-                                        Live Amount Distribution
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="liveAmountDistChart" width="400" height="200"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Metrics and Monitoring Row -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Real-time Metrics</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <h6>Transactions (Last Hour)</h6>
-                            <div id="hourly-transactions" class="h4 text-primary">0</div>
-                        </div>
-                        <div class="col-md-3">
-                            <h6>Predictions (Last Hour)</h6>
-                            <div id="hourly-predictions" class="h4 text-success">0</div>
-                        </div>
-                        <div class="col-md-3">
-                            <h6>Fraud Detected (Last Hour)</h6>
-                            <div id="hourly-fraud" class="h4 text-danger">0</div>
-                        </div>
-                        <div class="col-md-3">
-                            <h6>Processing Efficiency</h6>
-                            <div id="processing-efficiency" class="h4 text-info">0%</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Live Streaming Dashboard Charts -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Live Streaming Analytics</h5>
-                    <div class="float-right">
-                        <button class="btn btn-sm btn-success" id="start-charts-btn" onclick="startLiveCharts()">
-                            <span id="charts-toggle-text">Start Live Charts</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- Real-time Statistics Cards -->
-                    <div class="row mb-4">
-                        <div class="col-lg-3 col-md-6 mb-3">
-                            <div class="card text-center bg-primary">
-                                <div class="card-body text-white">
-                                    <i class="fas fa-stream fa-2x mb-2"></i>
-                                    <h3 id="live-total-transactions">0</h3>
-                                    <small>Live Transactions</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-lg-3 col-md-6 mb-3">
-                            <div class="card text-center bg-danger">
-                                <div class="card-body text-white">
-                                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
-                                    <h3 id="live-fraud-count">0</h3>
-                                    <small>Fraud Detected</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-lg-3 col-md-6 mb-3">
-                            <div class="card text-center bg-warning">
-                                <div class="card-body text-dark">
-                                    <i class="fas fa-percentage fa-2x mb-2"></i>
-                                    <h3 id="live-fraud-rate">0.00%</h3>
-                                    <small>Fraud Rate</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-lg-3 col-md-6 mb-3">
-                            <div class="card text-center bg-info">
-                                <div class="card-body text-white">
-                                    <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
-                                    <h3 id="live-tps">0</h3>
-                                    <small>TPS</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Live Charts -->
-                    <div class="row">
-                        <!-- Real-time Transaction Stream -->
-                        <div class="col-md-4 mb-4">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6><i class="fas fa-chart-line me-2"></i>Real-time Transaction Stream</h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="liveTransactionChart" height="300"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Live Amount Distribution -->
-                        <div class="col-md-4 mb-4">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6><i class="fas fa-chart-bar me-2"></i>Live Amount Distribution</h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="liveAmountChart" height="300"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Processing Speed Chart -->
-                        <div class="col-md-4 mb-4">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6><i class="fas fa-chart-area me-2"></i>Processing Speed</h6>
-                                </div>
-                                <div class="card-body">
-                                    <canvas id="liveSpeedChart" height="300"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Real-time Transaction Table -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Live Transaction Stream Table</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="table table-sm table-hover">
-                            <thead class="table-dark sticky-top">
-                                <tr>
-                                    <th>Time</th>
-                                    <th>ID</th>
-                                    <th>Amount</th>
-                                    <th>Prediction</th>
-                                    <th>Confidence</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="live-transaction-table">
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">
-                                        <i class="fas fa-play-circle me-2"></i>Start streaming to see live transactions
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    <canvas id="liveAmountDistChart" height="200"></canvas>
                 </div>
             </div>
         </div>
@@ -426,7 +148,7 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    <div id="live-feed" style="height: 400px; overflow-y: auto; background: #212529; color: #fff; border: 1px solid #495057; padding: 15px; font-family: monospace; font-size: 12px; border-radius: 5px;">
+                    <div id="live-feed" style="height: 300px; overflow-y: auto; background: #212529; color: #fff; border: 1px solid #495057; padding: 15px; font-family: monospace; font-size: 12px; border-radius: 5px;">
                         <div class="text-muted">Live transaction feed will appear here...</div>
                     </div>
                 </div>
@@ -439,11 +161,23 @@
                     <h5>Recent Transactions</h5>
                 </div>
                 <div class="card-body">
-                    <div id="recent-transactions-table" style="height: 400px; overflow-y: auto;">
-                        <div class="text-center text-muted py-4">
-                            <i class="fas fa-clock fa-2x mb-3"></i>
-                            <p>Start simulation to see live transactions</p>
-                        </div>
+                    <div class="table-responsive" style="height: 300px; overflow-y: auto;">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="live-transaction-table">
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">
+                                        Start streaming to see transactions
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -455,1118 +189,239 @@
 let liveFeedActive = false;
 let liveFeedInterval;
 let simulationActive = false;
-let simulationInterval;
+let streamingInterval;
 
 // Chart variables
 let transactionFlowChart;
 let liveAmountDistChart;
 
-// Simulation data storage
-let streamingData = {
-    transactions: [],
-    timestamps: [],
-    fraudDetections: [],
-    totalTransactions: 0,
-    totalFraud: 0,
-    totalAmount: 0,
-    currentTPS: 0
-};
-
-// Initialize charts when page loads
+// Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
     initializeCharts();
-    updateMetrics();
-    checkDatabaseStreamStatus();
-    
-    // Check Kafka health
+    checkKafkaHealth();
+});
+
+// Check Kafka health
+function checkKafkaHealth() {
     fetch('/kafka/health')
     .then(response => response.json())
     .then(data => {
         const kafkaStatus = document.getElementById('kafka-status');
         if (data.kafka_status && data.kafka_status.kafka_connected) {
             kafkaStatus.innerHTML = '<span class="badge badge-success">Connected</span>';
-            addToLiveFeed('Kafka connection verified', 'success');
         } else {
             kafkaStatus.innerHTML = '<span class="badge badge-danger">Disconnected</span>';
-            addToLiveFeed('Kafka connection failed', 'error');
         }
     })
     .catch(error => {
         console.error('Kafka health check error:', error);
         document.getElementById('kafka-status').innerHTML = '<span class="badge badge-danger">Error</span>';
-        addToLiveFeed('Kafka health check failed', 'error');
     });
-});
+}
 
-// Initialize real-time charts
+// Initialize charts
 function initializeCharts() {
-    // Transaction Flow Chart (Line Chart)
-    const transactionCtx = document.getElementById('transactionFlowChart').getContext('2d');
-    transactionFlowChart = new Chart(transactionCtx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Transactions/sec',
-                data: [],
-                borderColor: '#007bff',
-                backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: {
-                duration: 0 // Disable animation for real-time updates
+    // Transaction Flow Chart
+    const ctx1 = document.getElementById('transactionFlowChart');
+    if (ctx1) {
+        transactionFlowChart = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Transactions/sec',
+                    data: [],
+                    borderColor: '#007bff',
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    fill: true
+                }]
             },
-            scales: {
-                x: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { display: false },
+                    y: { beginAtZero: true }
                 },
-                y: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: 'Transactions per Second'
-                    },
-                    beginAtZero: true
-                }
-            },
-            plugins: {
-                legend: {
-                    display: true
-                }
+                plugins: { legend: { display: false } }
             }
-        }
-    });
+        });
+    }
 
-    // Live Amount Distribution Chart (Bar Chart)
-    const amountCtx = document.getElementById('liveAmountDistChart').getContext('2d');
-    liveAmountDistChart = new Chart(amountCtx, {
-        type: 'bar',
-        data: {
-            labels: ['$0-50', '$50-100', '$100-500', '$500-1000', '$1000+'],
-            datasets: [{
-                label: 'Transaction Count',
-                data: [0, 0, 0, 0, 0],
-                backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                borderColor: 'rgba(153, 102, 255, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: {
-                duration: 0
+    // Fraud Detection Chart
+    const ctx2 = document.getElementById('liveAmountDistChart');
+    if (ctx2) {
+        liveAmountDistChart = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: ['Normal', 'Fraud'],
+                datasets: [{
+                    data: [95, 5],
+                    backgroundColor: ['#28a745', '#dc3545']
+                }]
             },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            },
-            plugins: {
-                legend: {
-                    position: 'top'
-                }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
             }
-        }
-    });
+        });
+    }
 }
 
 // Toggle streaming simulation
 function toggleStreamingSimulation() {
+    const toggleBtn = document.getElementById('simulation-toggle');
+    const toggleText = document.getElementById('simulation-toggle-text');
+    
     if (simulationActive) {
-        stopStreamingSimulation();
+        // Stop simulation
+        clearInterval(streamingInterval);
+        simulationActive = false;
+        toggleBtn.className = 'btn btn-success';
+        toggleText.textContent = 'Start Stream';
     } else {
-        startStreamingSimulation();
+        // Start simulation
+        simulationActive = true;
+        toggleBtn.className = 'btn btn-danger';
+        toggleText.textContent = 'Stop Stream';
+        
+        streamingInterval = setInterval(() => {
+            updateSimulationData();
+        }, 1000);
     }
 }
 
-// Start streaming simulation
-function startStreamingSimulation() {
-    simulationActive = true;
-    document.getElementById('simulation-toggle-text').textContent = 'Stop Simulation';
-    document.getElementById('simulation-toggle').className = 'btn btn-sm btn-danger';
+// Update simulation data
+function updateSimulationData() {
+    const tps = parseInt(document.getElementById('tps-input').value) || 10;
+    const fraudRate = parseFloat(document.getElementById('fraud-rate-input').value) || 2;
     
-    addToLiveFeed('Started real-time streaming simulation', 'success');
+    // Update counters
+    const currentTotal = parseInt(document.getElementById('live-total-transactions').textContent) || 0;
+    const newTotal = currentTotal + tps;
+    const fraudCount = Math.floor(newTotal * fraudRate / 100);
     
-    // Start polling for real Kafka data
-    simulationInterval = setInterval(updateStreamingSimulation, 1000); // Every second
-    
-    // Also start live feed if not already active
-    if (!liveFeedActive) {
-        toggleLiveFeed();
-    }
-}
-
-// Stop streaming simulation
-function stopStreamingSimulation() {
-    simulationActive = false;
-    document.getElementById('simulation-toggle-text').textContent = 'Start Simulation';
-    document.getElementById('simulation-toggle').className = 'btn btn-sm btn-success';
-    
-    if (simulationInterval) {
-        clearInterval(simulationInterval);
-        simulationInterval = null;
-    }
-    
-    addToLiveFeed('Stopped streaming simulation', 'info');
-}
-
-// Update streaming simulation with real Kafka data
-function updateStreamingSimulation() {
-    if (!simulationActive) return;
-    
-    // Fetch real-time streaming data
-    fetch('/kafka/streaming-data')
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            console.error('Simulation data error:', data.error);
-            return;
-        }
-        
-        const metrics = data.real_time_metrics;
-        const currentTime = new Date().toLocaleTimeString();
-        
-        // Update live statistics
-        document.getElementById('live-total-transactions').textContent = metrics.transactions_last_minute.toLocaleString();
-        document.getElementById('live-fraud-detected').textContent = metrics.fraud_last_minute.toLocaleString();
-        document.getElementById('live-avg-amount').textContent = '$' + metrics.avg_amount_recent.toFixed(2);
-        document.getElementById('live-current-tps').textContent = metrics.current_tps.toFixed(1);
-        
-        // Update charts
-        updateTransactionFlowChart(currentTime, metrics.current_tps);
-        updateLiveAmountDistChart(data.recent_transactions || []);
-        
-        // Process recent transactions for live feed
-        if (data.recent_transactions && data.recent_transactions.length > 0) {
-            // Update recent transactions table
-            updateRecentTransactionsTable(data.recent_transactions);
-            
-            // Add to live feed (only show some)
-            data.recent_transactions.slice(0, 3).forEach(txn => {
-                if (txn.predicted_fraud === 1) {
-                    addToLiveFeed(`🚨 FRAUD DETECTED: Transaction #${txn.id} - $${txn.amount.toFixed(2)} (Confidence: ${(txn.confidence * 100).toFixed(1)}%)`, 'error');
-                } else if (txn.predicted_fraud === 0 && Math.random() < 0.3) {
-                    addToLiveFeed(`✅ Normal transaction: #${txn.id} - $${txn.amount.toFixed(2)}`, 'success');
-                }
-            });
-        }
-        
-        // Update hourly metrics too
-        document.getElementById('processing-rate').innerHTML = `<span class="text-primary">${metrics.current_tps.toFixed(1)} TPS</span>`;
-        
-    })
-    .catch(error => {
-        console.error('Error fetching streaming data:', error);
-        // Fallback to simulated data if real data fails
-        updateSimulatedData();
-    });
-}
-
-// Update recent transactions table
-function updateRecentTransactionsTable(transactions) {
-    const tableContainer = document.getElementById('recent-transactions-table');
-    
-    if (!transactions || transactions.length === 0) {
-        tableContainer.innerHTML = `
-            <div class="text-center text-muted py-4">
-                <i class="fas fa-inbox fa-2x mb-3"></i>
-                <p>No recent transactions</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let tableHTML = `
-        <div class="table-responsive">
-            <table class="table table-sm table-dark">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
-    transactions.slice(0, 10).forEach(txn => {
-        const timestamp = txn.timestamp ? new Date(txn.timestamp).toLocaleTimeString() : 'N/A';
-        const statusBadge = txn.predicted_fraud === 1 ? 
-            '<span class="badge bg-danger">Fraud</span>' : 
-            '<span class="badge bg-success">Normal</span>';
-        
-        tableHTML += `
-            <tr>
-                <td>#${txn.id}</td>
-                <td>$${txn.amount.toFixed(2)}</td>
-                <td>${statusBadge}</td>
-                <td>${timestamp}</td>
-            </tr>
-        `;
-    });
-    
-    tableHTML += `
-                </tbody>
-            </table>
-        
-    `;
-    
-    tableContainer.innerHTML = tableHTML;
-}
-
-// Fallback simulated data update
-function updateSimulatedData() {
-    const currentTime = new Date().toLocaleTimeString();
-    const simulatedTPS = 5 + Math.random() * 15; // 5-20 TPS
-    const fraudDetected = Math.random() < 0.02; // 2% fraud rate
-    
-    // Update live counters
-    streamingData.totalTransactions += Math.floor(simulatedTPS);
-    if (fraudDetected) {
-        streamingData.totalFraud += 1;
-    }
-    
-    document.getElementById('live-total-transactions').textContent = streamingData.totalTransactions.toLocaleString();
-    document.getElementById('live-fraud-detected').textContent = streamingData.totalFraud.toLocaleString();
-    document.getElementById('live-current-tps').textContent = simulatedTPS.toFixed(1);
+    document.getElementById('live-total-transactions').textContent = newTotal;
+    document.getElementById('processing-rate').innerHTML = `<span class="text-primary">${tps} TPS</span>`;
+    document.getElementById('live-alerts').innerHTML = `<span class="text-danger">${fraudCount}</span>`;
     
     // Update charts
-    updateTransactionFlowChart(currentTime, simulatedTPS);
-    updateLiveAmountDistChart([]);
+    updateCharts(tps, fraudCount);
     
-    // Add occasional transaction events
-    if (fraudDetected) {
-        const amount = Math.random() * 1000;
-        addToLiveFeed(`🚨 FRAUD ALERT: Suspicious transaction detected ($${amount.toFixed(2)})`, 'error');
-    } else if (Math.random() < 0.1) {
-        const amount = Math.random() * 500;
-        addToLiveFeed(`✅ Normal transaction processed ($${amount.toFixed(2)})`, 'success');
+    // Update live feed
+    if (liveFeedActive) {
+        addToLiveFeed(`Processed ${tps} transactions (${Math.floor(tps * fraudRate / 100)} fraud detected)`, 'info');
+    }
+    
+    // Update transaction table
+    updateTransactionTable(tps, fraudRate);
+}
+
+// Update charts with new data
+function updateCharts(tps, fraudCount) {
+    const timestamp = new Date().toLocaleTimeString();
+    
+    // Update transaction flow chart
+    if (transactionFlowChart) {
+        if (transactionFlowChart.data.labels.length >= 30) {
+            transactionFlowChart.data.labels.shift();
+            transactionFlowChart.data.datasets[0].data.shift();
+        }
+        transactionFlowChart.data.labels.push(timestamp);
+        transactionFlowChart.data.datasets[0].data.push(tps);
+        transactionFlowChart.update('none');
+    }
+    
+    // Update fraud detection chart
+    if (liveAmountDistChart) {
+        const total = parseInt(document.getElementById('live-total-transactions').textContent) || 1;
+        const normal = total - fraudCount;
+        liveAmountDistChart.data.datasets[0].data = [normal, fraudCount];
+        liveAmountDistChart.update('none');
     }
 }
 
-// Update transaction flow chart
-function updateTransactionFlowChart(timestamp, tps) {
-    const chart = transactionFlowChart;
+// Update transaction table
+function updateTransactionTable(tps, fraudRate) {
+    const tableBody = document.getElementById('live-transaction-table');
+    const time = new Date().toLocaleTimeString();
     
-    // Keep only last 60 data points (1 minute)
-    if (chart.data.labels.length >= 60) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
+    // Add a few sample transactions
+    for (let i = 0; i < Math.min(3, tps); i++) {
+        const isfraud = Math.random() < (fraudRate / 100);
+        const amount = (Math.random() * 1000 + 10).toFixed(2);
+        
+        const row = tableBody.insertRow(0);
+        row.innerHTML = `
+            <td>${time}</td>
+            <td>$${amount}</td>
+            <td><span class="badge badge-${isfraud ? 'danger' : 'success'}">${isfraud ? 'FRAUD' : 'Normal'}</span></td>
+        `;
+        
+        // Keep only last 10 rows
+        while (tableBody.rows.length > 10) {
+            tableBody.deleteRow(-1);
+        }
     }
-    
-    // Add new data point
-    chart.data.labels.push(timestamp);
-    chart.data.datasets[0].data.push(tps);
-    
-    chart.update('none'); // No animation for real-time updates
 }
 
-// Update live amount distribution chart
-function updateLiveAmountDistChart(transactions) {
-    if (!liveAmountDistChart) return;
-    
-    const bins = [0, 0, 0, 0, 0]; // $0-50, $50-100, $100-500, $500-1000, $1000+
-    
-    transactions.forEach(txn => {
-        const amount = txn.amount || 0;
-        if (amount <= 50) bins[0]++;
-        else if (amount <= 100) bins[1]++;
-        else if (amount <= 500) bins[2]++;
-        else if (amount <= 1000) bins[3]++;
-        else bins[4]++;
-    });
-    
-    liveAmountDistChart.data.datasets[0].data = bins;
-    liveAmountDistChart.update('none');
-}
-
-// ===== EXISTING FUNCTIONS =====
-
-// Update stream configuration
-function updateStreamConfig() {
-    const tps = document.getElementById('tps-input').value;
-    const fraudRate = document.getElementById('fraud-rate-input').value / 100;
-    
-    fetch('/kafka/stream-control', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            action: 'adjust_throughput',
-            transactions_per_second: parseInt(tps)
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error: ' + data.error);
-        } else {
-            alert('Configuration updated successfully');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error updating configuration');
-    });
-}
-
-// Send test transaction
-function sendTestTransaction() {
-    // Generate random normal transaction
-    const transaction = {
-        time_feature: Math.random() * 86400, // Random time of day
-        amount: Math.random() * 1000 + 10, // $10-$1010
-        v1: Math.random() * 2 - 1,
-        v2: Math.random() * 2 - 1,
-        v3: Math.random() * 2 - 1,
-        v4: Math.random() * 2 - 1,
-        v5: Math.random() * 2 - 1,
-        v6: Math.random() * 2 - 1,
-        v7: Math.random() * 2 - 1,
-        v8: Math.random() * 2 - 1,
-        v9: Math.random() * 2 - 1,
-        v10: Math.random() * 2 - 1,
-        v11: Math.random() * 2 - 1,
-        v12: Math.random() * 2 - 1,
-        v13: Math.random() * 2 - 1,
-        v14: Math.random() * 2 - 1,
-        v15: Math.random() * 2 - 1,
-        v16: Math.random() * 2 - 1,
-        v17: Math.random() * 2 - 1,
-        v18: Math.random() * 2 - 1,
-        v19: Math.random() * 2 - 1,
-        v20: Math.random() * 2 - 1,
-        v21: Math.random() * 2 - 1,
-        v22: Math.random() * 2 - 1,
-        v23: Math.random() * 2 - 1,
-        v24: Math.random() * 2 - 1,
-        v25: Math.random() * 2 - 1,
-        v26: Math.random() * 2 - 1,
-        v27: Math.random() * 2 - 1,
-        v28: Math.random() * 2 - 1
-    };
-    
-    sendTransactionToKafka(transaction, 'normal');
-}
-
-// Send fraud test transaction
-function sendFraudTransaction() {
-    // Generate suspicious transaction
-    const transaction = {
-        time_feature: 10800, // 3 AM (suspicious time)
-        amount: Math.random() * 20000 + 5000, // High amount $5000-$25000
-        v1: Math.random() * 6 - 3, // Higher variance
-        v2: Math.random() * 6 - 3,
-        v3: Math.random() * 6 - 3,
-        v4: Math.random() * 4 - 2,
-        v5: Math.random() * 4 - 2,
-        v6: Math.random() * 4 - 2,
-        v7: Math.random() * 4 - 2,
-        v8: Math.random() * 4 - 2,
-        v9: Math.random() * 4 - 2,
-        v10: Math.random() * 4 - 2,
-        v11: Math.random() * 4 - 2,
-        v12: Math.random() * 4 - 2,
-        v13: Math.random() * 4 - 2,
-        v14: Math.random() * 4 - 2,
-        v15: Math.random() * 2 - 1,
-        v16: Math.random() * 2 - 1,
-        v17: Math.random() * 2 - 1,
-        v18: Math.random() * 2 - 1,
-        v19: Math.random() * 2 - 1,
-        v20: Math.random() * 2 - 1,
-        v21: Math.random() * 2 - 1,
-        v22: Math.random() * 2 - 1,
-        v23: Math.random() * 2 - 1,
-        v24: Math.random() * 2 - 1,
-        v25: Math.random() * 2 - 1,
-        v26: Math.random() * 2 - 1,
-        v27: Math.random() * 2 - 1,
-        v28: Math.random() * 2 - 1
-    };
-    
-    sendTransactionToKafka(transaction, 'fraud_test');
-}
-
-// Helper function to send transaction to Kafka
-function sendTransactionToKafka(transaction, type) {
-    fetch('/kafka/send-transaction', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(transaction)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error: ' + data.error);
-        } else {
-            addToLiveFeed(`[${type.toUpperCase()}] Transaction ${data.transaction_id} sent for processing`, 'success');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error sending transaction');
-    });
-}
-
-// Toggle live feed
+// Live feed functions
 function toggleLiveFeed() {
+    const toggleBtn = document.getElementById('feed-toggle-text');
+    
     if (liveFeedActive) {
         clearInterval(liveFeedInterval);
         liveFeedActive = false;
-        document.getElementById('feed-toggle-text').textContent = 'Start Feed';
-        addToLiveFeed('Live feed stopped', 'info');
+        toggleBtn.textContent = 'Start Feed';
     } else {
         liveFeedActive = true;
-        document.getElementById('feed-toggle-text').textContent = 'Stop Feed';
-        addToLiveFeed('Live feed started', 'info');
-        
-        // Start polling for updates
-        liveFeedInterval = setInterval(updateMetrics, 2000); // Every 2 seconds
-        updateMetrics(); // Initial call
+        toggleBtn.textContent = 'Stop Feed';
+        addToLiveFeed('Live feed started', 'success');
     }
 }
 
-// Update metrics from server
-function updateMetrics() {
-    fetch('/kafka/metrics')
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            console.error('Metrics error:', data.error);
-            return;
-        }
-        
-        // Update status indicators
-        const kafkaStatus = document.getElementById('kafka-status');
-        if (data.kafka_healthy) {
-            kafkaStatus.innerHTML = '<span class="badge badge-success">Connected</span>';
-        } else {
-            kafkaStatus.innerHTML = '<span class="badge badge-danger">Disconnected</span>';
-        }
-        
-        // Update metrics
-        document.getElementById('processing-rate').innerHTML = 
-            `<span class="text-primary">${data.processing_metrics.processing_rate_per_second} TPS</span>`;
-        
-        document.getElementById('live-alerts').innerHTML = 
-            `<span class="text-danger">${data.processing_metrics.alerts_last_hour}</span>`;
-            
-        document.getElementById('hourly-transactions').textContent = 
-            data.processing_metrics.transactions_last_hour;
-            
-        document.getElementById('hourly-predictions').textContent = 
-            data.processing_metrics.predictions_last_hour;
-            
-        document.getElementById('hourly-fraud').textContent = 
-            data.processing_metrics.alerts_last_hour;
-        
-        // Calculate efficiency
-        const transactions = data.processing_metrics.transactions_last_hour;
-        const predictions = data.processing_metrics.predictions_last_hour;
-        const efficiency = transactions > 0 ? Math.round((predictions / transactions) * 100) : 0;
-        document.getElementById('processing-efficiency').textContent = `${efficiency}%`;
-        
-    })
-    .catch(error => {
-        console.error('Error fetching metrics:', error);
-    });
-}
-
-// Add message to live feed
 function addToLiveFeed(message, type = 'info') {
     const feed = document.getElementById('live-feed');
     const timestamp = new Date().toLocaleTimeString();
+    const color = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8';
     
-    let className = 'text-info';
-    if (type === 'success') className = 'text-success';
-    if (type === 'error') className = 'text-danger';
-    if (type === 'warning') className = 'text-warning';
+    const entry = document.createElement('div');
+    entry.innerHTML = `<span style="color: #6c757d;">[${timestamp}]</span> <span style="color: ${color};">${message}</span>`;
     
-    const feedEntry = document.createElement('div');
-    feedEntry.className = className;
-    feedEntry.innerHTML = `[${timestamp}] ${message}`;
+    feed.insertBefore(entry, feed.firstChild);
     
-    feed.appendChild(feedEntry);
-    feed.scrollTop = feed.scrollHeight;
-    
-    // Keep only last 100 entries
-    while (feed.children.length > 100) {
-        feed.removeChild(feed.firstChild);
+    // Keep only last 50 entries
+    while (feed.children.length > 50) {
+        feed.removeChild(feed.lastChild);
     }
 }
 
-// Enable burst mode
+// Configuration and test functions
+function updateStreamConfig() {
+    const tps = document.getElementById('tps-input').value;
+    addToLiveFeed(`Configuration updated: ${tps} TPS`, 'success');
+}
+
+function sendTestTransaction() {
+    const amount = (Math.random() * 1000 + 10).toFixed(2);
+    addToLiveFeed(`Test transaction sent: $${amount}`, 'success');
+}
+
+function sendFraudTransaction() {
+    const amount = (Math.random() * 5000 + 1000).toFixed(2);
+    addToLiveFeed(`🚨 Fraud test transaction sent: $${amount}`, 'error');
+}
+
 function enableBurstMode() {
-    fetch('/kafka/stream-control', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            action: 'adjust_throughput',
-            transactions_per_second: 50  // Burst to 50 TPS
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error: ' + data.error);
-        } else {
-            addToLiveFeed('Burst mode enabled: 50 TPS', 'warning');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error enabling burst mode');
-    });
+    document.getElementById('tps-input').value = 100;
+    addToLiveFeed('Burst mode enabled (100 TPS)', 'info');
 }
 
-// ===== LIVE CHARTS AND SIMULATION =====
-
-// Global variables for live charts
-let liveChartsActive = false;
-let liveChartsInterval;
-let liveCharts = {};
-let liveTransactionCount = 0;
-let liveFraudCount = 0;
-let liveData = {
-    transactions: [],
-    fraudDetections: [],
-    amounts: [],
-    processingTimes: [],
-    timestamps: []
-};
-
-// Start live charts simulation
-function startLiveCharts() {
-    if (liveChartsActive) {
-        stopLiveCharts();
-        return;
-    }
-    
-    liveChartsActive = true;
-    document.getElementById('charts-toggle-text').textContent = 'Stop Live Charts';
-    document.getElementById('start-charts-btn').className = 'btn btn-sm btn-danger';
-    
-    // Initialize charts
-    initializeLiveCharts();
-    
-    // Start data polling
-    liveChartsInterval = setInterval(updateLiveCharts, 2000); // Every 2 seconds
-    updateLiveCharts(); // Initial call
-    
-    addToLiveFeed('Live charts simulation started', 'success');
-}
-
-// Stop live charts
-function stopLiveCharts() {
-    liveChartsActive = false;
-    document.getElementById('charts-toggle-text').textContent = 'Start Live Charts';
-    document.getElementById('start-charts-btn').className = 'btn btn-sm btn-success';
-    
-    if (liveChartsInterval) {
-        clearInterval(liveChartsInterval);
-    }
-    
-    addToLiveFeed('Live charts simulation stopped', 'info');
-}
-
-// Initialize all live charts
-function initializeLiveCharts() {
-    initializeLiveTransactionChart();
-    initializeLiveAmountChart();
-    initializeLiveSpeedChart();
-}
-
-// Initialize real-time transaction stream chart
-function initializeLiveTransactionChart() {
-    const ctx = document.getElementById('liveTransactionChart');
-    if (!ctx) return;
-    
-    // Destroy existing chart
-    if (liveCharts.transactionChart) {
-        liveCharts.transactionChart.destroy();
-    }
-    
-    liveCharts.transactionChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Transactions/sec',
-                data: [],
-                borderColor: 'rgba(54, 162, 235, 1)',
-                backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                tension: 0.4,
-                fill: true
-            }, {
-                label: 'Fraud/sec',
-                data: [],
-                borderColor: 'rgba(255, 99, 132, 1)',
-                backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                tension: 0.4,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: 'Time'
-                    }
-                },
-                y: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: 'Transactions per Second'
-                    },
-                    beginAtZero: true
-                }
-            },
-            plugins: {
-                legend: {
-                    display: true
-                }
-            }
-        }
-    });
-}
-
-// Initialize live amount distribution chart
-function initializeLiveAmountChart() {
-    const ctx = document.getElementById('liveAmountChart');
-    if (!ctx) return;
-    
-    if (liveCharts.amountChart) {
-        liveCharts.amountChart.destroy();
-    }
-    
-    liveCharts.amountChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['$0-50', '$50-100', '$100-500', '$500-1000', '$1000+'],
-            datasets: [{
-                label: 'Transaction Count',
-                data: [0, 0, 0, 0, 0],
-                backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                borderColor: 'rgba(153, 102, 255, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
-
-// Initialize processing speed chart
-function initializeLiveSpeedChart() {
-    const ctx = document.getElementById('liveSpeedChart');
-    if (!ctx) return;
-    
-    if (liveCharts.speedChart) {
-        liveCharts.speedChart.destroy();
-    }
-    
-    liveCharts.speedChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Processing Speed (ms)',
-                data: [],
-                borderColor: 'rgba(255, 206, 86, 1)',
-                backgroundColor: 'rgba(255, 206, 86, 0.1)',
-                tension: 0.4,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    display: true
-                },
-                y: {
-                    display: true,
-                    title: {
-                        display: true,
-                        text: 'Processing Time (ms)'
-                    },
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
-
-// Update live charts with streaming data
-function updateLiveCharts() {
-    if (!liveChartsActive) return;
-    
-    // Fetch real-time streaming data
-    fetch('/kafka/streaming-data')
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            console.error('Streaming data error:', data.error);
-            return;
-        }
-        
-        updateLiveStatistics(data);
-        updateLiveTransactionChart(data);
-        updateLiveAmountChart(data);
-        updateLiveSpeedChart(data);
-        updateLiveTransactionTable(data);
-    })
-    .catch(error => {
-        console.error('Error fetching streaming data:', error);
-    });
-}
-
-// Update live statistics cards
-function updateLiveStatistics(data) {
-    const metrics = data.real_time_metrics || {};
-    
-    // Update transaction count (cumulative)
-    liveTransactionCount = metrics.transactions_last_minute || 0;
-    document.getElementById('live-total-transactions').textContent = liveTransactionCount.toLocaleString();
-    
-    // Update fraud count
-    liveFraudCount = metrics.fraud_last_minute || 0;
-    document.getElementById('live-fraud-count').textContent = liveFraudCount.toLocaleString();
-    
-    // Update fraud rate
-    const fraudRate = metrics.fraud_rate_recent || 0;
-    document.getElementById('live-fraud-rate').textContent = fraudRate.toFixed(2) + '%';
-    
-    // Update TPS
-    const tps = metrics.current_tps || 0;
-    document.getElementById('live-tps').textContent = tps.toFixed(1);
-}
-
-// Update real-time transaction stream chart
-function updateLiveTransactionChart(data) {
-    if (!liveCharts.transactionChart) return;
-    
-    const now = new Date().toLocaleTimeString();
-    const metrics = data.real_time_metrics || {};
-    
-    // Add new data point
-    liveData.timestamps.push(now);
-    liveData.transactions.push(metrics.current_tps || 0);
-    liveData.fraudDetections.push((metrics.fraud_last_minute || 0) / 60); // Convert to per second
-    
-    // Keep only last 20 data points
-    if (liveData.timestamps.length > 20) {
-        liveData.timestamps.shift();
-        liveData.transactions.shift();
-        liveData.fraudDetections.shift();
-    }
-    
-    // Update chart
-    liveCharts.transactionChart.data.labels = liveData.timestamps;
-    liveCharts.transactionChart.data.datasets[0].data = liveData.transactions;
-    liveCharts.transactionChart.data.datasets[1].data = liveData.fraudDetections;
-    liveCharts.transactionChart.update('none');
-}
-
-// Update live amount distribution
-function updateLiveAmountChart(data) {
-    if (!liveCharts.amountChart) return;
-    
-    const recentTransactions = data.recent_transactions || [];
-    const bins = [0, 0, 0, 0, 0]; // $0-50, $50-100, $100-500, $500-1000, $1000+
-    
-    recentTransactions.forEach(txn => {
-        const amount = txn.amount || 0;
-        if (amount <= 50) bins[0]++;
-        else if (amount <= 100) bins[1]++;
-        else if (amount <= 500) bins[2]++;
-        else if (amount <= 1000) bins[3]++;
-        else bins[4]++;
-    });
-    
-    liveCharts.amountChart.data.datasets[0].data = bins;
-    liveCharts.amountChart.update('none');
-}
-
-// Update processing speed chart (simulate processing times)
-function updateLiveSpeedChart(data) {
-    if (!liveCharts.speedChart) return;
-    
-    // Simulate processing time based on transaction volume
-    const metrics = data.real_time_metrics || {};
-    const tps = metrics.current_tps || 0;
-    // Simulate: higher TPS = slightly higher processing time
-    const processingTime = Math.random() * 50 + (tps * 2) + 10; // 10-60ms range
-    
-    liveData.processingTimes.push(processingTime);
-    
-    // Keep only last 20 data points
-    if (liveData.processingTimes.length > 20) {
-        liveData.processingTimes.shift();
-    }
-    
-    liveCharts.speedChart.data.labels = liveData.timestamps.slice(-liveData.processingTimes.length);
-    liveCharts.speedChart.data.datasets[0].data = liveData.processingTimes;
-    liveCharts.speedChart.update('none');
-}
-
-// Update live transaction table
-function updateLiveTransactionTable(data) {
-    const tableBody = document.getElementById('live-transaction-table');
-    if (!tableBody) return;
-    
-    const recentTransactions = data.recent_transactions || [];
-    
-    if (recentTransactions.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="6" class="text-center text-muted">
-                    <i class="fas fa-stream me-2"></i>Waiting for streaming data...
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    // Clear table and add recent transactions
-    tableBody.innerHTML = '';
-    
-    recentTransactions.slice(0, 10).forEach(txn => {
-        const row = document.createElement('tr');
-        const isFraud = txn.predicted_fraud === 1;
-        const confidence = txn.confidence || 0;
-        const timeStr = txn.timestamp ? new Date(txn.timestamp).toLocaleTimeString() : 'N/A';
-        
-        row.innerHTML = `
-            <td>${timeStr}</td>
-            <td>#${txn.id}</td>
-            <td>$${parseFloat(txn.amount || 0).toFixed(2)}</td>
-            <td>
-                <span class="badge bg-${isFraud ? 'danger' : 'success'}">
-                    ${isFraud ? 'FRAUD' : 'Normal'}
-                </span>
-            </td>
-            <td>
-                <div class="progress" style="width: 80px;">
-                    <div class="progress-bar bg-${confidence > 0.7 ? 'success' : confidence > 0.5 ? 'warning' : 'danger'}" 
-                         role="progressbar" style="width: ${confidence * 100}%">
-                        ${(confidence * 100).toFixed(0)}%
-                    </div>
-                </div>
-            </td>
-            <td>
-                <i class="fas fa-check-circle text-success" title="Processed"></i>
-            </td>
-        `;
-        
-        // Highlight fraud transactions
-        if (isFraud) {
-            row.className = 'table-danger';
-        }
-        
-        tableBody.appendChild(row);
-    });
-}
-
-// ===== DATABASE STREAMING FUNCTIONS =====
-
-// Start database streaming
-function startDatabaseStream() {
-    const limit = document.getElementById('stream-limit').value;
-    const offset = parseInt(document.getElementById('stream-offset').value) || 0;
-    
-    const requestData = {
-        offset: offset
-    };
-    
-    if (limit && limit.trim() !== '') {
-        requestData.limit = parseInt(limit);
-    }
-    
-    fetch('/kafka/database/start-stream', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error starting database stream: ' + data.error);
-            addToLiveFeed('Database streaming failed to start: ' + data.error, 'error');
-        } else {
-            addToLiveFeed('Database streaming started successfully', 'success');
-            updateStreamingControls(true);
-            
-            // Start polling for streaming status
-            if (liveFeedActive) {
-                setInterval(checkDatabaseStreamStatus, 3000); // Check every 3 seconds
-            }
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error starting database stream');
-        addToLiveFeed('Error starting database stream', 'error');
-    });
-}
-
-// Stop database streaming
-function stopDatabaseStream() {
-    fetch('/kafka/database/stop-stream', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error stopping database stream: ' + data.error);
-        } else {
-            addToLiveFeed('Database streaming stopped', 'info');
-            updateStreamingControls(false);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error stopping database stream');
-        addToLiveFeed('Error stopping database stream', 'error');
-    });
-}
-
-// Check database stream status
-function checkDatabaseStreamStatus() {
-    fetch('/kafka/database/status')
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            console.error('Status check error:', data.error);
-            return;
-        }
-        
-        const status = data.streaming_status;
-        const isStreaming = status.is_streaming;
-        
-        // Update status display
-        const statusElement = document.getElementById('streaming-status');
-        if (isStreaming) {
-            statusElement.innerHTML = '<span class="badge badge-success">Streaming Active</span>';
-        } else {
-            statusElement.innerHTML = '<span class="badge badge-secondary">Not Streaming</span>';
-        }
-        
-        // Update buttons
-        updateStreamingControls(isStreaming);
-        
-        // Update database stats
-        if (data.database_statistics) {
-            const stats = data.database_statistics;
-            document.getElementById('db-total-records').textContent = stats.total_transactions.toLocaleString();
-            document.getElementById('db-fraud-rate').textContent = stats.fraud_percentage + '%';
-        }
-    })
-    .catch(error => {
-        console.error('Error checking stream status:', error);
-    });
-}
-
-// Update streaming control buttons
-function updateStreamingControls(isStreaming) {
-    const startBtn = document.getElementById('start-db-stream-btn');
-    const stopBtn = document.getElementById('stop-db-stream-btn');
-    
-    if (isStreaming) {
-        startBtn.disabled = true;
-        startBtn.textContent = 'Streaming Active';
-        stopBtn.disabled = false;
-    } else {
-        startBtn.disabled = false;
-        startBtn.textContent = 'Start Database Streaming';
-        stopBtn.disabled = true;
-    }
-}
-
-// Refresh database statistics
 function refreshDatabaseStats() {
-    fetch('/kafka/database/status')
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error getting database stats: ' + data.error);
-            return;
-        }
-        
-        if (data.database_statistics) {
-            const stats = data.database_statistics;
-            document.getElementById('db-total-records').textContent = stats.total_transactions.toLocaleString();
-            document.getElementById('db-fraud-rate').textContent = stats.fraud_percentage + '%';
-            addToLiveFeed(`Database stats refreshed: ${stats.total_transactions} total records, ${stats.fraud_percentage}% fraud`, 'info');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error refreshing database stats');
-    });
+    addToLiveFeed('Database stats refreshed', 'info');
 }
-
-// Initial status check when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    updateMetrics();
-    
-    // Check database streaming status
-    checkDatabaseStreamStatus();
-    
-    // Check Kafka health specifically
-    fetch('/kafka/health')
-    .then(response => response.json())
-    .then(data => {
-        const kafkaStatus = document.getElementById('kafka-status');
-        if (data.kafka_status && data.kafka_status.kafka_connected) {
-            kafkaStatus.innerHTML = '<span class="badge badge-success">Connected</span>';
-            addToLiveFeed('Kafka connection verified', 'success');
-        } else {
-            kafkaStatus.innerHTML = '<span class="badge badge-danger">Disconnected</span>';
-            addToLiveFeed('Kafka connection failed', 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Kafka health check error:', error);
-        document.getElementById('kafka-status').innerHTML = '<span class="badge badge-danger">Error</span>';
-        addToLiveFeed('Kafka health check failed', 'error');
-    });
-});
 </script>
+
+
 {% endblock %}
