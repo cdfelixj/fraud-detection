@@ -97,7 +97,7 @@ services:
 
   kafka-consumer:
     build: .
-    command: python kafka_consumer.py
+    command: python kafka_consumer.py --high-performance --parallel=2 --batch-size=100
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,10 +111,17 @@ services:
       - DATABASE_URL=postgresql://fraud_user:fraud_password@postgres:5432/fraud_detection
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - DOCKER_CONTAINER=true
     volumes:
       - ./saved_models:/app/saved_models
       - ./attached_assets:/app/attached_assets
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
 
   # data-simulator:
   #   build: .

@@ -26,13 +26,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class FraudDetectionConsumer:
-    """Kafka consumer for real-time fraud detection"""
+    """Kafka consumer for real-time fraud detection with high throughput optimization"""
     
-    def __init__(self):
+    def __init__(self, batch_size=50):
         self.config = KafkaConfig()
         self.ml_models = FraudDetectionModels()
         self.consumer = None
         self.running = False
+        self.batch_size = batch_size
+        
+        # Performance monitoring
+        self.stats = {
+            'messages_processed': 0,
+            'predictions_made': 0,
+            'alerts_created': 0,
+            'start_time': None,
+            'last_stats_log': None
+        }
         
     def start_consuming(self):
         """Start consuming messages from Kafka"""
@@ -45,6 +55,8 @@ class FraudDetectionConsumer:
             
             logger.info(f"Started consuming from topic: {self.config.topics['transactions']}")
             self.running = True
+            self.stats['start_time'] = time.time()
+            self.stats['last_stats_log'] = time.time()
             
             # Load ML models
             with app.app_context():
@@ -59,27 +71,250 @@ class FraudDetectionConsumer:
             logger.error(f"Error starting consumer: {e}")
             raise
     
+    def start_multiple_consumers(self, num_consumers=2):
+        """Start multiple consumer instances for parallel processing"""
+        import threading
+        
+        logger.info(f"Starting {num_consumers} consumer threads for parallel processing")
+        
+        threads = []
+        for i in range(num_consumers):
+            consumer = FraudDetectionConsumer()
+            thread = threading.Thread(
+                target=consumer.start_consuming,
+                name=f"FraudConsumer-{i+1}"
+            )
+            thread.daemon = True
+            threads.append(thread)
+            thread.start()
+            
+        return threads
+    
     def _consume_loop(self):
-        """Main consumption loop"""
+        """Main consumption loop with batch processing for higher throughput"""
         try:
+            message_batch = []
+            last_commit_time = time.time()
+            commit_interval = 5.0  # Commit every 5 seconds
+            
             for message in self.consumer:
                 if not self.running:
                     break
-                    
-                try:
-                    # Process the transaction message
-                    self._process_transaction_message(message)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing message: {e}")
-                    continue
+                
+                message_batch.append(message)
+                
+                # Process batch when it reaches target size or timeout
+                if len(message_batch) >= self.batch_size or (time.time() - last_commit_time) > commit_interval:
+                    try:
+                        # Process the batch
+                        self._process_message_batch(message_batch)
+                        
+                        # Commit offsets manually for better control
+                        self.consumer.commit()
+                        last_commit_time = time.time()
+                        
+                        # Clear the batch
+                        batch_size = len(message_batch)
+                        message_batch = []
+                        
+                        # Update stats
+                        self.stats['messages_processed'] += batch_size
+                        self._log_performance_stats()
+                        
+                        logger.debug(f"Processed batch of {batch_size}, committed offsets")
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing message batch: {e}")
+                        # Don't commit on error - will reprocess
+                        message_batch = []
+                        continue
                     
         except KeyboardInterrupt:
             logger.info("Consumer interrupted by user")
+            # Process remaining messages in batch
+            if message_batch:
+                try:
+                    self._process_message_batch(message_batch)
+                    self.consumer.commit()
+                except Exception as e:
+                    logger.error(f"Error processing final batch: {e}")
         except Exception as e:
             logger.error(f"Consumer loop error: {e}")
-        finally:
-            self._cleanup()
+    
+    def _process_message_batch(self, messages):
+        """Process a batch of messages for better throughput"""
+        if not messages:
+            return
+            
+        logger.debug(f"Processing batch of {len(messages)} messages")
+        
+        # Group messages by whether they need predictions
+        prediction_messages = []
+        other_messages = []
+        
+        for message in messages:
+            try:
+                transaction_data = message.value
+                if not self._validate_transaction_message(transaction_data):
+                    continue
+                    
+                # Create transaction record first
+                with app.app_context():
+                    transaction = self._create_transaction_record(transaction_data)
+                    if not transaction:
+                        continue
+                    
+                    # Check if predictions are enabled
+                    enable_predictions = transaction_data.get('enable_predictions', True)
+                    if enable_predictions:
+                        prediction_messages.append((transaction, transaction_data))
+                    else:
+                        other_messages.append((transaction, transaction_data))
+                        
+            except Exception as e:
+                logger.error(f"Error preparing message for batch processing: {e}")
+                continue
+        
+        # Process predictions in batch if we have any
+        if prediction_messages:
+            self._process_prediction_batch(prediction_messages)
+            
+        # Process other messages
+        for transaction, transaction_data in other_messages:
+            logger.debug(f"Processed transaction {transaction_data.get('transaction_id')} without prediction")
+    
+    def _process_prediction_batch(self, prediction_messages):
+        """Process fraud predictions in batch for better performance"""
+        try:
+            transactions = []
+            transaction_data_list = []
+            
+            for transaction, transaction_data in prediction_messages:
+                transactions.append(transaction)
+                transaction_data_list.append(transaction_data)
+            
+            # Prepare feature vectors for batch prediction
+            feature_vectors = []
+            for transaction in transactions:
+                features = [
+                    transaction.time_feature,
+                    *[getattr(transaction, f'v{i}') for i in range(1, 29)],
+                    transaction.amount
+                ]
+                feature_vectors.append(features)
+            
+            if not feature_vectors:
+                return
+                
+            # Scale features
+            import numpy as np
+            features_array = np.array(feature_vectors)
+            
+            with app.app_context():
+                # Apply scaling
+                if hasattr(self.ml_models, 'data_processor') and self.ml_models.data_processor and hasattr(self.ml_models.data_processor.scaler, "scale_"):
+                    features_scaled = self.ml_models.data_processor.scaler.transform(features_array)
+                else:
+                    from data_processor import DataProcessor
+                    data_proc = DataProcessor()
+                    data_proc.load_scaler()
+                    features_scaled = data_proc.scaler.transform(features_array)
+                
+                # Make batch predictions
+                prediction_results = self.ml_models.ensemble_predict(features_scaled)
+                
+                if prediction_results is None:
+                    logger.error("Failed to get batch prediction results")
+                    return
+                
+                # Save predictions and create alerts in batch
+                prediction_records = []
+                fraud_alerts = []
+                
+                for i, (transaction, transaction_data) in enumerate(zip(transactions, transaction_data_list)):
+                    try:
+                        # Extract prediction results
+                        prediction = int(prediction_results['final_predictions'][i])
+                        confidence = float(prediction_results['confidence_scores'][i])
+                        ensemble_score = float(prediction_results['ensemble_scores'][i])
+                        isolation_score = float(prediction_results['isolation_scores'][i]) if prediction_results['isolation_scores'] is not None else 0.0
+                        logistic_score = float(prediction_results['logistic_probabilities'][i]) if prediction_results['logistic_probabilities'] is not None else 0.0
+                        xgboost_score = float(prediction_results['xgboost_probabilities'][i]) if prediction_results['xgboost_probabilities'] is not None else 0.0
+                        
+                        # Create prediction record
+                        pred_record = Prediction()
+                        pred_record.transaction_id = transaction.id
+                        pred_record.isolation_forest_score = isolation_score
+                        pred_record.logistic_regression_score = logistic_score
+                        pred_record.xgboost_score = xgboost_score
+                        pred_record.ensemble_prediction = ensemble_score
+                        pred_record.final_prediction = prediction
+                        pred_record.confidence_score = confidence
+                        pred_record.model_version = 'kafka_ensemble_v1.0_batch'
+                        pred_record.prediction_time = datetime.utcnow()
+                        
+                        prediction_records.append(pred_record)
+                        
+                        # Create fraud alert if needed
+                        if prediction == 1 and confidence > 0.7:
+                            alert = FraudAlert()
+                            alert.transaction_id = transaction.id
+                            alert.alert_level = 'HIGH' if confidence > 0.8 else 'MEDIUM'
+                            alert.alert_reason = f"Batch fraud prediction (confidence: {confidence:.3f})"
+                            fraud_alerts.append(alert)
+                        
+                        # Publish prediction result
+                        result = {
+                            'transaction_id': transaction_data['transaction_id'],
+                            'prediction': prediction,
+                            'confidence': confidence,
+                            'model_scores': {
+                                'isolation_forest': isolation_score,
+                                'logistic_regression': logistic_score,
+                                'xgboost': xgboost_score,
+                                'ensemble': ensemble_score
+                            },
+                            'timestamp': datetime.utcnow().isoformat()
+                        }
+                        self._publish_prediction_result(transaction_data, result)
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing prediction for transaction {i}: {e}")
+                        continue
+                
+                # Bulk save to database
+                if prediction_records:
+                    db.session.bulk_save_objects(prediction_records)
+                if fraud_alerts:
+                    db.session.bulk_save_objects(fraud_alerts)
+                
+                db.session.commit()
+                
+                # Update stats
+                self.stats['predictions_made'] += len(prediction_records)
+                self.stats['alerts_created'] += len(fraud_alerts)
+                
+                logger.info(f"Batch processed {len(prediction_records)} predictions, {len(fraud_alerts)} alerts")
+                
+        except Exception as e:
+            logger.error(f"Error in batch prediction processing: {e}")
+            db.session.rollback()
+    
+    def _log_performance_stats(self):
+        """Log performance statistics periodically"""
+        current_time = time.time()
+        
+        # Log stats every 30 seconds
+        if current_time - self.stats['last_stats_log'] >= 30:
+            elapsed_time = current_time - self.stats['start_time']
+            messages_per_sec = self.stats['messages_processed'] / elapsed_time if elapsed_time > 0 else 0
+            predictions_per_sec = self.stats['predictions_made'] / elapsed_time if elapsed_time > 0 else 0
+            
+            logger.info(f"Performance Stats - Messages: {self.stats['messages_processed']} "
+                       f"({messages_per_sec:.1f}/sec), Predictions: {self.stats['predictions_made']} "
+                       f"({predictions_per_sec:.1f}/sec), Alerts: {self.stats['alerts_created']}")
+            
+            self.stats['last_stats_log'] = current_time
     
     def _process_transaction_message(self, message):
         """Process a single transaction message"""
@@ -291,60 +526,68 @@ class FraudDetectionConsumer:
             
         except Exception as e:
             logger.error(f"Error publishing prediction result: {e}")
-    
-    def _cleanup(self):
-        """Clean up resources"""
-        self.running = False
-        if self.consumer:
-            self.consumer.close()
-            logger.info("Kafka consumer closed")
 
-def signal_handler(signum, frame):
-    """Handle shutdown signals"""
-    logger.info("Received shutdown signal")
-    global consumer
-    if consumer:
+# High-performance consumer entry point
+def run_high_performance_consumer(parallel=1, batch_size=50):
+    """Run optimized high-performance fraud detection consumer"""
+    
+    logger.info(f"Starting high-performance fraud detection consumer")
+    logger.info(f"Parallel consumers: {parallel}")
+    logger.info(f"Batch size: {batch_size}")
+    
+    consumer = FraudDetectionConsumer()
+    
+    def signal_handler(signum, frame):
+        logger.info("Received shutdown signal")
         consumer.running = False
-    sys.exit(0)
-
-# Global consumer instance
-consumer = None
-
-def main():
-    """Main consumer process"""
-    global consumer
-    
-    # Set up signal handlers
+        
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Wait for Kafka to be ready
-    logger.info("Waiting for Kafka to be ready...")
-    max_retries = 30
-    for i in range(max_retries):
-        try:
-            if kafka_manager.health_check():
-                logger.info("Kafka is ready!")
-                break
-        except Exception as e:
-            logger.warning(f"Kafka not ready (attempt {i+1}/{max_retries}): {e}")
-            time.sleep(2)
-    else:
-        logger.error("Kafka not available after maximum retries")
-        sys.exit(1)
-    
-    # Create topics if they don't exist
-    from kafka_config import create_topics_if_not_exist
-    create_topics_if_not_exist()
-    
-    # Start consumer
     try:
-        consumer = FraudDetectionConsumer()
-        logger.info("Starting Kafka consumer for fraud detection...")
-        consumer.start_consuming()
+        if parallel > 1:
+            threads = consumer.start_multiple_consumers(parallel)
+            
+            # Wait for all threads to complete
+            for thread in threads:
+                thread.join()
+        else:
+            consumer.start_consuming()
+            
     except Exception as e:
-        logger.error(f"Consumer failed: {e}")
-        sys.exit(1)
+        logger.error(f"Consumer error: {e}")
+    finally:
+        logger.info("Consumer shutdown complete")
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    import argparse
+    
+    # Add command line arguments for high-performance mode
+    parser = argparse.ArgumentParser(description='Fraud Detection Consumer')
+    parser.add_argument('--high-performance', action='store_true', help='Enable high-performance batch mode')
+    parser.add_argument('--parallel', type=int, default=1, help='Number of parallel consumers (default: 1)')
+    parser.add_argument('--batch-size', type=int, default=50, help='Batch size for processing (default: 50)')
+    
+    args = parser.parse_args()
+    
+    if args.high_performance:
+        logger.info("Starting in HIGH-PERFORMANCE mode")
+        logger.info(f"Performance Settings: parallel={args.parallel}, batch_size={args.batch_size}")
+        run_high_performance_consumer(parallel=args.parallel, batch_size=args.batch_size)
+    else:
+        logger.info("Starting in standard mode")
+        consumer = FraudDetectionConsumer()
+        
+        def signal_handler(signum, frame):
+            logger.info("Received shutdown signal")
+            consumer.running = False
+            
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        try:
+            consumer.start_consuming()
+        except Exception as e:
+            logger.error(f"Consumer error: {e}")
+        finally:
+            logger.info("Consumer shutdown complete")

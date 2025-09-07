@@ -26,35 +26,41 @@ class KafkaConfig:
         }
         
     def get_producer_config(self) -> Dict[str, Any]:
-        """Get Kafka producer configuration"""
+        """Get Kafka producer configuration optimized for high throughput"""
         return {
             'bootstrap_servers': self.bootstrap_servers,
             'value_serializer': lambda x: json.dumps(x, default=str).encode('utf-8'),
             'key_serializer': lambda x: str(x).encode('utf-8') if x else None,
-            'acks': 'all',  # Wait for all replicas
+            'acks': 1,  # Changed from 'all' to 1 for better throughput
             'retries': 3,
-            'batch_size': 16384,
-            'linger_ms': 1,
-            'buffer_memory': 33554432,
-            'compression_type': 'gzip',
-            'max_in_flight_requests_per_connection': 1,  # Required for idempotent producer
-            'enable_idempotence': True
+            'batch_size': 32768,  # Increased from 16384 for better batching
+            'linger_ms': 5,  # Increased from 1ms to allow more batching
+            'buffer_memory': 67108864,  # Increased to 64MB from 32MB
+            'compression_type': 'lz4',  # Changed from gzip to lz4 for faster compression
+            'max_in_flight_requests_per_connection': 5,  # Increased from 1 for better throughput
+            'enable_idempotence': False,  # Disabled for better performance
+            'request_timeout_ms': 30000,
+            'delivery_timeout_ms': 120000
         }
     
     def get_consumer_config(self, group_id: str) -> Dict[str, Any]:
-        """Get Kafka consumer configuration"""
+        """Get Kafka consumer configuration optimized for high throughput"""
         return {
             'bootstrap_servers': self.bootstrap_servers,
             'group_id': group_id,
             'value_deserializer': lambda x: json.loads(x.decode('utf-8')),
             'key_deserializer': lambda x: x.decode('utf-8') if x else None,
             'auto_offset_reset': 'latest',
-            'enable_auto_commit': True,
-            'auto_commit_interval_ms': 1000,
+            'enable_auto_commit': False,  # Manual commit for better control
             'session_timeout_ms': 30000,
             'heartbeat_interval_ms': 3000,
-            'max_poll_records': 500,
-            'max_poll_interval_ms': 300000
+            'max_poll_records': 1000,  # Increased from 500 for better batching
+            'max_poll_interval_ms': 300000,
+            'fetch_min_bytes': 1024,  # Wait for at least 1KB of data
+            'fetch_max_wait_ms': 100,  # Maximum 100ms wait for batching
+            'max_partition_fetch_bytes': 1048576,  # 1MB per partition
+            'connections_max_idle_ms': 300000,
+            'request_timeout_ms': 40000
         }
 
 class KafkaManager:
