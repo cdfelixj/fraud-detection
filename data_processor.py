@@ -153,10 +153,10 @@ class DataProcessor:
             logging.error(f"Error creating feature matrix: {str(e)}")
             return None, None
     
-    def prepare_training_data(self):
+    def prepare_training_data(self, transactions=None):
         """Prepare data for model training"""
         try:
-            X, y = self.get_feature_matrix()
+            X, y = self.get_feature_matrix(transactions)
             
             if X is None or y is None:
                 return None, None, None, None

@@ -136,39 +136,21 @@ def upload_data():
 
 @app.route('/train', methods=['GET', 'POST'])
 def train_models():
-    """Train machine learning models with enhanced parameters"""
+    """Simplified training interface with just transaction count selection"""
     if request.method == 'GET':
         transaction_count = Transaction.query.count()
         latest_performance = ModelPerformance.query.order_by(ModelPerformance.evaluation_date.desc()).first()
         
-        # Check if models are loaded but potentially stale/miscalibrated
-        models_warning = False
-        if ml_models.is_trained:
-            # Check if there are any recent predictions that seem suspicious (all high confidence fraud)
-            recent_predictions = Prediction.query.order_by(Prediction.prediction_time.desc()).limit(10).all()
-            if recent_predictions and len(recent_predictions) >= 5:
-                fraud_predictions = sum(1 for p in recent_predictions if p.final_prediction == 1)
-                high_conf_predictions = sum(1 for p in recent_predictions if p.confidence_score > 0.75)
-                if fraud_predictions >= 4 and high_conf_predictions >= 4:
-                    models_warning = True
-                    flash('Warning: Current models may be miscalibrated. Consider retraining with fresh data.', 'warning')
-        
-        return render_template('train_enhanced.html', 
+        return render_template('train.html', 
                              transaction_count=transaction_count,
                              model_trained=ml_models.is_trained,
-                             latest_performance=latest_performance,
-                             models_warning=models_warning)
+                             latest_performance=latest_performance)
     
     try:
-        # Check if we have data
-        if Transaction.query.count() == 0:
-            flash('No transaction data available. Please upload data first.', 'warning')
-            return redirect(url_for('upload_data'))
+        action = request.form.get('action', 'train')
         
-        action = request.form.get('action', 'quick_train')
-        
+        # Handle clearing models
         if action == 'clear_models':
-            # Clear existing models to start fresh
             try:
                 import os
                 # Remove saved model files
@@ -183,7 +165,7 @@ def train_models():
                 ml_models.logistic_model = None
                 ml_models.is_trained = False
                 
-                flash('Existing models cleared successfully. You can now train fresh models.', 'success')
+                flash('Models cleared successfully!', 'success')
                 return redirect(url_for('train_models'))
                 
             except Exception as e:
@@ -191,43 +173,42 @@ def train_models():
                 flash(f'Error clearing models: {str(e)}', 'danger')
                 return redirect(url_for('train_models'))
         
-        if action == 'custom_train':
-            # Get custom parameters from form
-            custom_params = {
-                'contamination': float(request.form.get('contamination', 0.002)),
-                'n_estimators_iso': int(request.form.get('n_estimators_iso', 100)),
-                'max_samples': request.form.get('max_samples', 'auto'),
-                'max_iter': int(request.form.get('max_iter', 1000)),
-                'solver': request.form.get('solver', 'liblinear'),
-                'penalty': request.form.get('penalty', 'l2'),
-                'iso_weight': float(request.form.get('iso_weight', 0.3)),
-                'log_weight': float(request.form.get('log_weight', 0.7)),
-                'test_size': float(request.form.get('test_size', 0.2)),
-                'random_state': int(request.form.get('random_state', 42)),
-                'cross_validation': request.form.get('cross_validation') == 'true'
-            }
-            
-            # Update ML models with custom parameters
-            ml_models.update_parameters(custom_params)
+        # Check if we have data
+        total_transactions = Transaction.query.count()
+        if total_transactions == 0:
+            flash('No transaction data available. Please upload data first.', 'warning')
+            return redirect(url_for('upload_data'))
         
-        # Prepare training data
-        X_train, X_test, y_train, y_test = data_processor.prepare_training_data()
+        # Get transaction limit from form
+        transaction_limit = request.form.get('transaction_limit', 'all')
+        
+        # Prepare training data with limit
+        if transaction_limit == 'all':
+            # Use all transactions
+            X_train, X_test, y_train, y_test = data_processor.prepare_training_data()
+        else:
+            # Use limited number of transactions
+            limit = int(transaction_limit)
+            # Get limited transactions (most recent ones)
+            limited_transactions = Transaction.query.order_by(Transaction.id.desc()).limit(limit).all()
+            X_train, X_test, y_train, y_test = data_processor.prepare_training_data(transactions=limited_transactions)
         
         if X_train is None:
             flash('Error preparing training data', 'danger')
             return redirect(url_for('train_models'))
         
-        # Train models
+        # Train models with default parameters
         if ml_models.train_models(X_train, X_test, y_train, y_test):
-            flash('Models trained successfully with custom parameters!', 'success')
-            logging.info("Model training completed successfully")
+            transaction_used = len(X_train) + len(X_test)
+            flash(f'Models trained successfully on {transaction_used:,} transactions!', 'success')
+            logging.info(f"Model training completed successfully with {transaction_used} transactions")
         else:
             flash('Error training models', 'danger')
             
         return redirect(url_for('train_models'))
         
     except Exception as e:
-        logging.error(f"Error training models: {str(e)}")
+        logging.error(f"Error in simplified training: {str(e)}")
         flash(f'Error training models: {str(e)}', 'danger')
         return redirect(url_for('train_models'))
 

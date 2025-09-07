@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Train Models - Credit Card Fraud Detection{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-brain me-3"></i>Train Models</h2>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Model Status -->
+    <div class="row mb-4">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Current Status
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="row">
+                        <div class="col-6">
+                            <h4><i class="fas fa-database me-2"></i>Transactions Available</h4>
+                            <h2><span class="badge bg-primary fs-4">{{ transaction_count }}</span></h2>
+                        </div>
+                        <div class="col-6">
+                            <h4><i class="fas fa-robot me-2"></i>Models Status</h4>
+                            {% if model_trained %}
+                                <h2><span class="badge bg-success fs-4">Trained</span></h2>
+                                {% if latest_performance %}
+                                <p class="mt-2 mb-0"><strong>Accuracy:</strong> {{ "%.1f"|format(latest_performance.accuracy_score * 100) }}%</p>
+                                <p><strong>F1-Score:</strong> {{ "%.3f"|format(latest_performance.f1_score) }}</p>
+                                {% endif %}
+                            {% else %}
+                                <h2><span class="badge bg-danger fs-4">Not Trained</span></h2>
+                                <p class="text-muted mt-2">Train your models to start detecting fraud</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simple Training Form -->
+    <div class="row">
+        <div class="col-md-6 mx-auto">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-play me-2"></i>Train Your Models
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('train_models') }}" id="trainingForm">
+                        
+                        <!-- Transaction Count Selector -->
+                        <div class="mb-4">
+                            <label for="transaction_limit" class="form-label">
+                                <i class="fas fa-list-ol me-2"></i>Number of transactions to train on:
+                            </label>
+                            <select class="form-select form-select-lg" id="transaction_limit" name="transaction_limit">
+                                <option value="1000" {% if transaction_count >= 1000 %}selected{% else %}disabled{% endif %}>
+                                    1,000 transactions {% if transaction_count < 1000 %}(Not enough data){% endif %}
+                                </option>
+                                <option value="5000" {% if transaction_count >= 5000 %}selected{% elif transaction_count < 5000 %}disabled{% endif %}>
+                                    5,000 transactions {% if transaction_count < 5000 %}(Not enough data){% endif %}
+                                </option>
+                                <option value="10000" {% if transaction_count >= 10000 %}selected{% elif transaction_count < 10000 %}disabled{% endif %}>
+                                    10,000 transactions {% if transaction_count < 10000 %}(Not enough data){% endif %}
+                                </option>
+                                <option value="50000" {% if transaction_count >= 50000 %}selected{% elif transaction_count < 50000 %}disabled{% endif %}>
+                                    50,000 transactions {% if transaction_count < 50000 %}(Not enough data){% endif %}
+                                </option>
+                                <option value="all" selected>All {{ transaction_count }} transactions</option>
+                            </select>
+                            <div class="form-text">
+                                More transactions = better accuracy, but longer training time
+                            </div>
+                        </div>
+
+                        <!-- Training Button -->
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-success btn-lg px-5 py-3" 
+                                    {% if transaction_count == 0 %}disabled{% endif %}>
+                                <i class="fas fa-play me-2"></i>
+                                {% if model_trained %}
+                                    Retrain Models
+                                {% else %}
+                                    Train Models
+                                {% endif %}
+                            </button>
+                            
+                            {% if transaction_count == 0 %}
+                            <p class="text-muted mt-3">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                No transaction data available. Please upload data first.
+                            </p>
+                            <a href="{{ url_for('upload_data') }}" class="btn btn-outline-primary">
+                                <i class="fas fa-upload me-1"></i>Upload Data
+                            </a>
+                            {% endif %}
+                        </div>
+
+                        {% if model_trained %}
+                        <hr class="my-4">
+                        <div class="text-center">
+                            <button type="button" class="btn btn-outline-warning" 
+                                    onclick="clearModels()" data-bs-toggle="modal" data-bs-target="#clearModelsModal">
+                                <i class="fas fa-trash me-2"></i>Clear Existing Models
+                            </button>
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Progress (hidden by default) -->
+    <div class="row mt-4" id="progressSection" style="display: none;">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Training in Progress
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="progressBar">
+                            <span id="progressPercent">0%</span>
+                        </div>
+                    </div>
+                    <p id="progressText" class="mb-0">Preparing data...</p>
+                    <small class="text-muted">This may take a few minutes depending on data size</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clear Models Confirmation Modal -->
+{% if model_trained %}
+<div class="modal fade" id="clearModelsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Clear Existing Models</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to clear the existing trained models?</p>
+                <p><strong>This action cannot be undone.</strong> You will need to retrain the models to use fraud detection again.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('train_models') }}" style="display: inline;">
+                    <input type="hidden" name="action" value="clear_models">
+                    <button type="submit" class="btn btn-danger">Clear Models</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Show progress when form is submitted
+document.getElementById('trainingForm').addEventListener('submit', function(e) {
+    const submitButton = this.querySelector('button[type="submit"]');
+    const transactionLimit = document.getElementById('transaction_limit').value;
+    
+    // Update button state
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Training...';
+    
+    // Show progress section
+    document.getElementById('progressSection').style.display = 'block';
+    
+    // Scroll to progress section
+    document.getElementById('progressSection').scrollIntoView({ behavior: 'smooth' });
+    
+    // Simulate progress updates based on data size
+    let progress = 0;
+    let progressMessages = [
+        'Preparing data...',
+        'Loading transactions...',
+        'Processing features...',
+        'Training Isolation Forest...',
+        'Training Logistic Regression...',
+        'Evaluating models...',
+        'Saving models...'
+    ];
+    let messageIndex = 0;
+    
+    const interval = setInterval(() => {
+        progress += Math.random() * 15 + 5; // Increment by 5-20%
+        
+        if (progress > 95) {
+            progress = 95;
+            clearInterval(interval);
+        }
+        
+        // Update message every 15% progress
+        if (progress > (messageIndex + 1) * 15 && messageIndex < progressMessages.length - 1) {
+            messageIndex++;
+        }
+        
+        updateProgress(progress, progressMessages[messageIndex]);
+    }, 1000);
+});
+
+function updateProgress(percent, text) {
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressText = document.getElementById('progressText');
+    
+    progressBar.style.width = percent + '%';
+    progressPercent.textContent = Math.round(percent) + '%';
+    progressText.textContent = text;
+}
+
+function clearModels() {
+    // This function is called by the button, but the actual action is handled by the modal
+}
+</script>
+
+<style>
+.card {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: none;
+}
+
+.badge.fs-4 {
+    font-size: 1.5rem !important;
+}
+
+.btn-lg.px-5.py-3 {
+    font-size: 1.25rem;
+    border-radius: 10px;
+}
+
+.progress {
+    border-radius: 15px;
+}
+
+.progress-bar {
+    border-radius: 15px;
+    font-weight: bold;
+}
+
+.form-select-lg {
+    border-radius: 8px;
+}
+</style>
+{% endblock %}
