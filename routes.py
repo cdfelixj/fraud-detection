@@ -154,7 +154,7 @@ def train_models():
             try:
                 import os
                 # Remove saved model files
-                model_files = ['saved_models/isolation_forest.pkl', 'saved_models/logistic_model.pkl', 'scaler.pkl']
+                model_files = ['saved_models/isolation_forest.pkl', 'saved_models/logistic_model.pkl', 'saved_models/xgboost_model.pkl', 'scaler.pkl']
                 for file_path in model_files:
                     if os.path.exists(file_path):
                         os.remove(file_path)
@@ -163,6 +163,7 @@ def train_models():
                 # Reset ML models object
                 ml_models.isolation_forest = None
                 ml_models.logistic_model = None
+                ml_models.xgboost_model = None
                 ml_models.is_trained = False
                 
                 flash('Models cleared successfully!', 'success')
@@ -181,6 +182,36 @@ def train_models():
         
         # Get transaction limit from form
         transaction_limit = request.form.get('transaction_limit', 'all')
+        
+        # Get advanced parameters if provided
+        advanced_params = {}
+        
+        # XGBoost parameters
+        if request.form.get('n_estimators_xgb'):
+            advanced_params['n_estimators_xgb'] = int(request.form.get('n_estimators_xgb'))
+        if request.form.get('max_depth'):
+            advanced_params['max_depth'] = int(request.form.get('max_depth'))
+        if request.form.get('learning_rate'):
+            advanced_params['learning_rate'] = float(request.form.get('learning_rate'))
+        if request.form.get('subsample'):
+            advanced_params['subsample'] = float(request.form.get('subsample'))
+        
+        # Ensemble weights
+        if request.form.get('iso_weight') and request.form.get('log_weight') and request.form.get('xgb_weight'):
+            advanced_params['iso_weight'] = float(request.form.get('iso_weight'))
+            advanced_params['log_weight'] = float(request.form.get('log_weight'))
+            advanced_params['xgb_weight'] = float(request.form.get('xgb_weight'))
+        
+        # Training options
+        if request.form.get('use_smote'):
+            advanced_params['use_smote'] = True
+        if request.form.get('test_size'):
+            advanced_params['test_size'] = float(request.form.get('test_size'))
+        
+        # Update model parameters if any advanced options were provided
+        if advanced_params:
+            ml_models.update_parameters(advanced_params)
+            logging.info(f"Updated model parameters: {advanced_params}")
         
         # Prepare training data with limit
         if transaction_limit == 'all':

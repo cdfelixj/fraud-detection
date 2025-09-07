@@ -137,37 +137,47 @@ def create_topics_if_not_exist():
     """Create Kafka topics if they don't exist"""
     try:
         from kafka.admin import KafkaAdminClient, NewTopic
+        from kafka.errors import TopicAlreadyExistsError
         
         admin_client = KafkaAdminClient(
             bootstrap_servers=kafka_manager.config.bootstrap_servers,
             client_id='fraud_detection_admin'
         )
         
+        # Check existing topics first
+        existing_topics = admin_client.list_topics()
+        
         # Define topics to create
         topics_to_create = []
         for topic_name in kafka_manager.config.topics.values():
-            topics_to_create.append(
-                NewTopic(
-                    name=topic_name,
-                    num_partitions=3,
-                    replication_factor=1
+            if topic_name not in existing_topics:
+                topics_to_create.append(
+                    NewTopic(
+                        name=topic_name,
+                        num_partitions=3,
+                        replication_factor=1
+                    )
                 )
-            )
         
-        # Create topics
-        try:
-            admin_client.create_topics(topics_to_create, validate_only=False)
-            logger.info(f"Topics created successfully: {list(kafka_manager.config.topics.values())}")
-        except Exception as e:
-            if "TopicExistsException" in str(e):
-                logger.info("Topics already exist")
-            else:
-                logger.error(f"Error creating topics: {e}")
+        # Create only non-existing topics
+        if topics_to_create:
+            try:
+                admin_client.create_topics(topics_to_create, validate_only=False)
+                logger.info(f"New topics created: {[t.name for t in topics_to_create]}")
+            except TopicAlreadyExistsError:
+                logger.info("Topics already exist - this is normal on restart")
+            except Exception as e:
+                if "TopicAlreadyExistsError" in str(e) or "already exists" in str(e):
+                    logger.info("Topics already exist - this is normal on restart")
+                else:
+                    logger.error(f"Error creating topics: {e}")
+        else:
+            logger.info("All required topics already exist")
                 
         admin_client.close()
         
     except Exception as e:
-        logger.error(f"Failed to create topics: {e}")
+        logger.error(f"Failed to initialize topic creation: {e}")
 
 # Message schemas for validation
 TRANSACTION_SCHEMA = {

@@ -46,6 +46,8 @@ class Prediction(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     transaction_id: Mapped[int] = mapped_column(Integer, db.ForeignKey('transactions.id'), nullable=False)
     isolation_forest_score: Mapped[float] = mapped_column(Float)
+    logistic_regression_score: Mapped[float] = mapped_column(Float)
+    xgboost_score: Mapped[float] = mapped_column(Float)
     ensemble_prediction: Mapped[float] = mapped_column(Float)
     final_prediction: Mapped[int] = mapped_column(Integer)  # 0=normal, 1=fraud
     confidence_score: Mapped[float] = mapped_column(Float)
